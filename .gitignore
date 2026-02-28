@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+
+# Compiled output
+dist/
+
+# Environment / secrets — NEVER commit these
+.env
+*.env
+wallet_data.json
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/settings.json
