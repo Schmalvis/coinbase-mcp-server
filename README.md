@@ -13,6 +13,7 @@ A server that lets AI assistants (like Claude) perform real cryptocurrency opera
 - [Step 2: Set Up the Project](#step-2-set-up-the-project)
 - [Step 3: Configure Your Environment](#step-3-configure-your-environment)
 - [Step 4: Run the Server](#step-4-run-the-server)
+- [Using the Pre-Built Docker Image](#using-the-pre-built-docker-image)
 - [Connecting to an AI Assistant](#connecting-to-an-ai-assistant)
 - [Your Wallet — What You Need to Know](#your-wallet--what-you-need-to-know)
 - [Testnet vs Mainnet](#testnet-vs-mainnet)
@@ -227,6 +228,58 @@ docker compose down
 ```
 
 > **Your wallet data is saved automatically** in a Docker "volume" (a persistent storage area). It survives container restarts. See [Your Wallet — What You Need to Know](#your-wallet--what-you-need-to-know) for more details.
+
+---
+
+## Using the Pre-Built Docker Image
+
+A Docker image is automatically built and published to the GitHub Container Registry on every push to `main`. You can pull and run it directly — no need to clone the repository or compile anything.
+
+### Pull the image
+
+```bash
+docker pull ghcr.io/malvis/coinbase-mcp-server:latest
+```
+
+To pin to a specific version (recommended for stability):
+
+```bash
+docker pull ghcr.io/malvis/coinbase-mcp-server:v1.0.0
+```
+
+### Run the pre-built image
+
+```bash
+docker run -i \
+  --env-file .env \
+  -v coinbase_wallet_data:/app/data \
+  ghcr.io/malvis/coinbase-mcp-server:latest
+```
+
+You still need a local `.env` file with your Coinbase API credentials — see [Step 3](#step-3-configure-your-environment).
+
+### Available image tags
+
+| Tag | When to use |
+|-----|-------------|
+| `latest` | Most recent build from `main` — always up to date |
+| `v1.2.3` | Pinned to a specific release — most stable for production |
+| `1.2` | Tracks the latest patch within a minor version |
+| `sha-a1b2c3d` | Exact build by git commit — maximum traceability |
+
+### Making customizations
+
+If you want to modify the server (change tools, add logic, etc.):
+
+1. Fork or clone the repository
+2. Make your changes in `src/index.ts`
+3. Build your own image:
+
+```bash
+docker build -t my-coinbase-mcp-server .
+```
+
+Or push to your own GitHub repo — the included workflow will automatically publish your customized image to `ghcr.io/YOUR_USERNAME/coinbase-mcp-server`.
 
 ---
 
