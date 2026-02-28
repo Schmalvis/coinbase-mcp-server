@@ -1,0 +1,27 @@
+services:
+  mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: coinbase-agentkit-mcp:latest
+
+    # MCP over stdio requires an interactive TTY
+    stdin_open: true
+    tty: true
+
+    environment:
+      CDP_API_KEY_NAME: ${CDP_API_KEY_NAME}
+      CDP_API_KEY_PRIVATE_KEY: ${CDP_API_KEY_PRIVATE_KEY}
+      NETWORK_ID: ${NETWORK_ID:-base-sepolia}
+
+    volumes:
+      # Named volume → wallet_data.json survives container recreation
+      - wallet_data:/app/data
+
+    restart: unless-stopped
+
+# Docker manages the lifecycle of this named volume independently of the container.
+# `docker compose down` will NOT delete it; use `docker compose down -v` if you
+# intentionally want to wipe the wallet (IRREVERSIBLE if not backed up).
+volumes:
+  wallet_data:

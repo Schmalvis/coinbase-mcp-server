@@ -1,0 +1,26 @@
+{
+  "name": "coinbase-agentkit-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server exposing Coinbase AgentKit tools with persistent MPC wallet",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@coinbase/agentkit": "^0.4.0",
+    "@coinbase/agentkit-model-context-protocol": "^0.1.0",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
