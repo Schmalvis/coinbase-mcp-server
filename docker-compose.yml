@@ -1,9 +1,6 @@
 services:
   mcp-server:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: coinbase-agentkit-mcp:latest
+    image: ghcr.io/schmalvis/coinbase-mcp-server:latest
 
     # MCP over stdio requires an interactive TTY
     stdin_open: true
