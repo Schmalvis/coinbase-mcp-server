@@ -8,6 +8,7 @@ dist/
 .env
 *.env
 wallet_data.json
+!stack.env
 
 # OS / editor noise
 .DS_Store
