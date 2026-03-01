@@ -4,8 +4,8 @@ FROM node:20-slim AS builder
 WORKDIR /app
 
 # Copy manifests first so npm install is cached unless deps change
-COPY package.json package-lock.json* ./
-RUN npm install
+COPY package.json package-lock.json ./
+RUN npm ci
 
 # Compile TypeScript → dist/
 COPY tsconfig.json ./
@@ -23,8 +23,8 @@ WORKDIR /app
 RUN mkdir -p /app/data && chown node:node /app/data
 
 # Install production-only dependencies
-COPY package.json package-lock.json* ./
-RUN npm install --omit=dev && npm cache clean --force
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
 
 # Copy compiled output from the builder stage
 COPY --from=builder /app/dist ./dist
