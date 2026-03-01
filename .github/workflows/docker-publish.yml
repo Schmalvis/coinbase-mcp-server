@@ -10,7 +10,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}   # e.g. malvis/coinbase-mcp-server
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   build-and-push:
@@ -24,6 +24,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Regenerate the lockfile on Linux so it is compatible with the Linux
+      # Docker build environment. The committed lockfile (generated on Windows)
+      # is only used for local development; CI always produces a fresh one.
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Regenerate lockfile on Linux
+        run: npm install --package-lock-only --ignore-scripts
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -32,7 +43,7 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}   # automatically provided, no setup needed
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract image metadata (tags & labels)
         id: meta
@@ -40,13 +51,9 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            # tag "latest" on every push to main
             type=raw,value=latest,enable={{is_default_branch}}
-            # tag with the full git tag, e.g. v1.2.3
             type=semver,pattern={{version}}
-            # tag with major.minor only, e.g. v1.2
             type=semver,pattern={{major}}.{{minor}}
-            # tag with the short git SHA for traceability, e.g. sha-a1b2c3d
             type=sha,prefix=sha-
 
       - name: Build and push Docker image
@@ -56,6 +63,5 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # Cache layers between runs to speed up subsequent builds
           cache-from: type=gha
           cache-to: type=gha,mode=max

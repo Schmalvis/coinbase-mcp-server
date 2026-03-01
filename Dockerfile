@@ -5,7 +5,7 @@ WORKDIR /app
 
 # Copy manifests first so npm install is cached unless deps change
 COPY package.json package-lock.json ./
-RUN npm install -g npm@11 && npm ci
+RUN npm ci
 
 # Compile TypeScript → dist/
 COPY tsconfig.json ./
@@ -24,7 +24,7 @@ RUN mkdir -p /app/data && chown node:node /app/data
 
 # Install production-only dependencies
 COPY package.json package-lock.json ./
-RUN npm install -g npm@11 && npm ci --omit=dev && npm cache clean --force
+RUN npm ci --omit=dev && npm cache clean --force
 
 # Copy compiled output from the builder stage
 COPY --from=builder /app/dist ./dist
