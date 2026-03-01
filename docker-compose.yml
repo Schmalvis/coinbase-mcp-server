@@ -6,10 +6,15 @@ services:
     stdin_open: true
     tty: true
 
+    ports:
+      - "${WEB_PORT:-3002}:${WEB_PORT:-3002}"
+
     environment:
       CDP_API_KEY_NAME: ${CDP_API_KEY_NAME}
       CDP_API_KEY_PRIVATE_KEY: ${CDP_API_KEY_PRIVATE_KEY}
       NETWORK_ID: ${NETWORK_ID:-base-sepolia}
+      WEB_PORT: ${WEB_PORT:-3002}
+      LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-30}
 
     volumes:
       # Named volume → wallet_data.json survives container recreation

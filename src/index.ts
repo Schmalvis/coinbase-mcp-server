@@ -9,6 +9,15 @@ import {
 import * as fs from "fs";
 import * as path from "path";
 import "dotenv/config";
+import {
+  logBoot,
+  logFatal,
+  logToolCall,
+  logToolResult,
+  trimOldLogs,
+  writeLog,
+} from "./logger.js";
+import { startWebServer } from "./webServer.js";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -30,7 +39,9 @@ function loadWalletData(): string | undefined {
   try {
     JSON.parse(raw);
   } catch {
-    console.error("[boot] wallet_data.json is corrupted – ignoring it and creating a fresh wallet.");
+    const msg = "wallet_data.json is corrupted – ignoring it and creating a fresh wallet.";
+    console.error("[boot]", msg);
+    logBoot(msg);
     return undefined;
   }
 
@@ -47,6 +58,9 @@ function persistWalletData(data: unknown): void {
 // ── Boot ─────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
+  // 0. Trim log entries older than retention window
+  trimOldLogs();
+
   // 1. Validate required environment variables
   const apiKeyName = process.env.CDP_API_KEY_NAME;
   const apiKeyPrivateKey = process.env.CDP_API_KEY_PRIVATE_KEY;
@@ -62,9 +76,13 @@ async function main(): Promise<void> {
   const cdpWalletData = loadWalletData();
 
   if (cdpWalletData) {
-    console.error(`[boot] Resuming existing wallet from ${WALLET_DATA_FILE}`);
+    const msg = `Resuming existing wallet from ${WALLET_DATA_FILE}`;
+    console.error("[boot]", msg);
+    logBoot(msg);
   } else {
-    console.error("[boot] No wallet file found – a fresh MPC wallet will be created.");
+    const msg = "No wallet file found – a fresh MPC wallet will be created.";
+    console.error("[boot]", msg);
+    logBoot(msg);
   }
 
   const walletProvider = await CdpWalletProvider.configureWithWallet({
@@ -83,7 +101,9 @@ async function main(): Promise<void> {
 
   // 5. Obtain MCP tool definitions + unified handler from AgentKit ──────────
   const { tools, toolHandler } = await getMcpTools(agentKit);
-  console.error(`[boot] Loaded ${tools.length} AgentKit tool(s).`);
+  const toolsMsg = `Loaded ${tools.length} AgentKit tool(s).`;
+  console.error("[boot]", toolsMsg);
+  logBoot(toolsMsg, { toolCount: tools.length, network: networkId });
 
   // 6. Build MCP server ──────────────────────────────────────────────────────
   const server = new Server(
@@ -94,20 +114,43 @@ async function main(): Promise<void> {
   // List available tools
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
 
-  // Execute a tool call
+  // Execute a tool call — wrapped to capture timing and log result
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
-    return toolHandler(name, (args ?? {}) as Record<string, unknown>);
+    const safeArgs = (args ?? {}) as Record<string, unknown>;
+
+    logToolCall(name, safeArgs);
+    const start = Date.now();
+    try {
+      const result = await toolHandler(name, safeArgs);
+      logToolResult(name, true, Date.now() - start);
+      return result;
+    } catch (err: unknown) {
+      logToolResult(name, false, Date.now() - start);
+      throw err; // let MCP SDK format the error response
+    }
   });
 
   // 7. Connect stdio transport ───────────────────────────────────────────────
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
+  // 8. Start web UI alongside stdio ─────────────────────────────────────────
+  startWebServer(tools);
+
+  writeLog({
+    ts: new Date().toISOString(),
+    level: "info",
+    event: "server_ready",
+    message: `MCP server ready. ${tools.length} tool(s) available on ${networkId}.`,
+    data: { toolCount: tools.length, network: networkId },
+  });
+
   console.error("[mcp] Server running on stdio – ready for connections.");
 }
 
 main().catch((err: unknown) => {
   console.error("[fatal]", err);
+  logFatal("Unhandled startup error", err);
   process.exit(1);
 });
