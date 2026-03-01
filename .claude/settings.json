@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(npm view @coinbase/agentkit-model-context-protocol@0.2.0 dependencies)",
-      "Bash(npm run build)"
+      "Bash(npm run build)",
+      "Bash(gh run list --limit 5)"
     ]
   }
 }
