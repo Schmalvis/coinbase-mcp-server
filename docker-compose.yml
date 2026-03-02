@@ -1,7 +1,7 @@
 services:
   mcp-server:
     image: ghcr.io/schmalvis/coinbase-mcp-server:latest
-
+    container_name: coinbase-mcp
     # MCP over stdio requires an interactive TTY
     stdin_open: true
     tty: true
