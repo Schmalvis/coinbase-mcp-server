@@ -149,8 +149,18 @@ async function main(): Promise<void> {
   console.error("[mcp] Server running on stdio – ready for connections.");
 }
 
-main().catch((err: unknown) => {
+main().catch(async (err: unknown) => {
   console.error("[fatal]", err);
   logFatal("Unhandled startup error", err);
+
+  // If the CDP API is rate-limiting wallet creation (429), pause before exiting
+  // so Docker's restart policy doesn't immediately hammer the API again.
+  const msg = String(err);
+  if (msg.includes("429") || msg.toLowerCase().includes("rate limit") || msg.toLowerCase().includes("resource_exhausted")) {
+    const wait = 60;
+    console.error(`[fatal] Rate limit detected – waiting ${wait}s before exit to slow restart loop.`);
+    await new Promise((r) => setTimeout(r, wait * 1000));
+  }
+
   process.exit(1);
 });
