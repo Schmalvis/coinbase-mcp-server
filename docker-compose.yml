@@ -17,13 +17,16 @@ services:
       LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-30}
 
     volumes:
-      # Named volume → wallet_data.json survives container recreation
-      - wallet_data:/app/data
+      # WALLET_DATA_PATH (stack.env) controls where wallet data is stored:
+      #   unset / default → Docker-managed named volume  (automatic, no host setup needed)
+      #   absolute path   → bind mount to that host path (transparent, easy to back up)
+      #                     The directory must exist and be writable by UID 1000 (node user).
+      #                     e.g. mkdir -p /opt/coinbase-mcp/data && chown 1000:1000 /opt/coinbase-mcp/data
+      - ${WALLET_DATA_PATH:-wallet_data}:/app/data
 
     restart: unless-stopped
 
-# Docker manages the lifecycle of this named volume independently of the container.
-# `docker compose down` will NOT delete it; use `docker compose down -v` if you
-# intentionally want to wipe the wallet (IRREVERSIBLE if not backed up).
+# Named volume — only used when WALLET_DATA_PATH is unset.
+# `docker compose down` preserves it; `docker compose down -v` deletes it (IRREVERSIBLE).
 volumes:
   wallet_data:
