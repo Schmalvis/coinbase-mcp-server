@@ -157,8 +157,8 @@ main().catch(async (err: unknown) => {
   // so Docker's restart policy doesn't immediately hammer the API again.
   const msg = String(err);
   if (msg.includes("429") || msg.toLowerCase().includes("rate limit") || msg.toLowerCase().includes("resource_exhausted")) {
-    const wait = 60;
-    console.error(`[fatal] Rate limit detected – waiting ${wait}s before exit to slow restart loop.`);
+    const wait = 600;
+    console.error(`[fatal] Rate limit detected – waiting ${wait}s (10 min) before exit to allow rate limit window to clear.`);
     await new Promise((r) => setTimeout(r, wait * 1000));
   }
 
