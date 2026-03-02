@@ -142,14 +142,20 @@ This server uses the **Coinbase Developer Platform (CDP)** to access your wallet
 2. Click **Create API Key**
 3. Give it a name (e.g., `my-mcp-server`)
 4. Select the permissions you need (at minimum: wallet read/write)
-5. Click **Create and Download**
+5. Click **Create and Download** — this downloads a JSON file to your machine
 
-You will receive two pieces of information — **save these somewhere safe**:
+The downloaded JSON file looks like this:
 
-- **API Key Name** — looks like: `organizations/abc123/apiKeys/xyz789`
-- **Private Key** — a long block of text starting with `-----BEGIN EC PRIVATE KEY-----`
+```json
+{
+  "id": "a1b2c3d4e5f6...",
+  "privateKey": "MoYREDACTED...U="
+}
+```
 
-> **Warning:** You will only see the Private Key once. If you lose it, you must create a new key.
+You will use both fields directly as environment variables — no reformatting needed.
+
+> **Warning:** You can only download this file once. Store it somewhere safe and never commit it to Git.
 
 ---
 
@@ -194,11 +200,14 @@ cp .env.example .env
 Copy-Item .env.example .env
 ```
 
-Edit `.env`:
+Open your downloaded CDP API key JSON file and copy the two fields directly into `.env`:
 
 ```env
-CDP_API_KEY_NAME=organizations/YOUR_ORG_ID/apiKeys/YOUR_KEY_ID
-CDP_API_KEY_PRIVATE_KEY=-----BEGIN EC PRIVATE KEY-----\nYOUR_KEY\n-----END EC PRIVATE KEY-----
+# From the "id" field in your downloaded JSON key file
+CDP_API_KEY_NAME=a1b2c3d4e5f6...
+
+# From the "privateKey" field in your downloaded JSON key file (paste as-is)
+CDP_API_KEY_PRIVATE_KEY=MoYREDACTED...U=
 
 NETWORK_ID=base-sepolia
 
@@ -208,11 +217,11 @@ LOG_RETENTION_DAYS=30
 
 ### For Portainer / Docker Compose — use `stack.env`
 
-The `stack.env` file is committed to the repository and used by Portainer when deploying the stack. Edit it directly:
+The `stack.env` file is committed to the repository and used by Portainer when deploying the stack. Edit it directly with the same values:
 
 ```env
-CDP_API_KEY_NAME=organizations/YOUR_ORG_ID/apiKeys/YOUR_KEY_ID
-CDP_API_KEY_PRIVATE_KEY="-----BEGIN EC PRIVATE KEY-----\nYOUR_KEY\n-----END EC PRIVATE KEY-----\n"
+CDP_API_KEY_NAME=a1b2c3d4e5f6...
+CDP_API_KEY_PRIVATE_KEY=MoYREDACTED...U=
 
 NETWORK_ID=base-sepolia
 
@@ -220,23 +229,7 @@ WEB_PORT=3002
 LOG_RETENTION_DAYS=30
 ```
 
-### Formatting the Private Key
-
-The private key must have its line breaks written as `\n` (not actual line breaks):
-
-**Original (from CDP Portal):**
-```
------BEGIN EC PRIVATE KEY-----
-MHQCAQEEIAbcdef...
------END EC PRIVATE KEY-----
-```
-
-**How it must look in the env file:**
-```
-CDP_API_KEY_PRIVATE_KEY=-----BEGIN EC PRIVATE KEY-----\nMHQCAQEEIAbcdef...\n-----END EC PRIVATE KEY-----
-```
-
-> **Tip:** In VS Code, enable "Regular Expressions" in Find & Replace, search for `\n`, replace with `\\n`.
+> **No reformatting needed.** The new Coinbase API key format uses a base64-encoded private key. Paste the `privateKey` value from the JSON file exactly as-is — no PEM headers, no `\n` escaping.
 
 ---
 
@@ -422,12 +415,7 @@ If you see `The command '/bin/sh -c npm ci' returned a non-zero code: 1`, you ar
 echo $CDP_API_KEY_NAME   # should not be empty
 ```
 
-**Check key format** — `CDP_API_KEY_NAME` must look like:
-```
-organizations/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/apiKeys/yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy
-```
-
-**Check private key** — must be all on one line with `\n` between sections (not real line breaks).
+**Check key values match the downloaded JSON** — `CDP_API_KEY_NAME` should be the `id` field (a short alphanumeric string). `CDP_API_KEY_PRIVATE_KEY` should be the `privateKey` field (a base64 string ending in `=`). No PEM headers or `\n` escaping required.
 
 ### "Cannot find module" error
 

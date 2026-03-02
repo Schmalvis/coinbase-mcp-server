@@ -10,6 +10,9 @@ dist/
 wallet_data.json
 !stack.env
 
+# Coinbase API key JSON files — NEVER commit these
+cdp_api_key*.json
+
 # OS / editor noise
 .DS_Store
 Thumbs.db
