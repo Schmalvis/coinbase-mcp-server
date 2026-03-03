@@ -86,9 +86,38 @@ Switch by changing `NETWORK_ID` in your env file. **Always start on testnet.**
 
 ---
 
+## Mnemonic Phrase (Recommended for New Deployments)
+
+By default the server creates a new wallet via the Coinbase CDP API on first run (`CreateWallet`). This operation is subject to a project-level rate limit that can be exhausted by rapid container restart loops.
+
+Setting a **BIP39 mnemonic phrase** bypasses `CreateWallet` entirely — the wallet is derived locally from the seed, avoiding the API call:
+
+```env
+# stack.env
+MNEMONIC_PHRASE=word1 word2 word3 ... word12
+```
+
+**Advantages:**
+- No `CreateWallet` API call → immune to project-level rate limits
+- Wallet is fully recoverable from the phrase alone — `wallet_data.json` is a cache, not the source of truth
+- Deterministic: same phrase always produces the same wallet address
+
+**Generating a mnemonic securely:**
+1. Go to [iancoleman.io/bip39](https://iancoleman.io/bip39) in your browser
+2. Go offline (disconnect from internet) before generating
+3. Generate a 12 or 24-word phrase
+4. Write it down on paper and store it securely — treat it like a seed phrase for a hardware wallet
+5. Set it in `stack.env` and add `MNEMONIC_PHRASE` to Portainer's environment variables
+
+> Never store the mnemonic in the same place as your API keys or `wallet_data.json`.
+
+---
+
 ## Corrupted Wallet File
 
 If `wallet_data.json` is corrupted, the server logs a warning and creates a fresh wallet automatically. The old wallet address becomes inaccessible — move any funds out before this happens if possible.
+
+If you set `MNEMONIC_PHRASE`, a corrupted or missing `wallet_data.json` is not a problem — the server will re-derive the same wallet from the phrase.
 
 ---
 
