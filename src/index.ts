@@ -1,11 +1,13 @@
 import { AgentKit, CdpWalletProvider } from "@coinbase/agentkit";
 import { getMcpTools } from "@coinbase/agentkit-model-context-protocol";
+import { Coinbase, Wallet } from "@coinbase/coinbase-sdk";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import "dotenv/config";
@@ -26,6 +28,13 @@ import { startWebServer } from "./webServer.js";
  * Mount a named Docker volume here so the file survives restarts/recreation.
  */
 const WALLET_DATA_FILE = "/app/data/wallet_data.json";
+
+/**
+ * Persisted UUID used as the Idempotency-Key header on CDP CreateWallet calls.
+ * Reusing the same key within 24 hours causes CDP to return the same wallet
+ * instead of creating a new one, making rapid restarts safe even under rate limits.
+ */
+const IDEMPOTENCY_KEY_FILE = path.join(path.dirname(WALLET_DATA_FILE), ".wallet_idempotency_key");
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -55,6 +64,38 @@ function persistWalletData(data: unknown): void {
   console.error(`[boot] Wallet data persisted → ${WALLET_DATA_FILE}`);
 }
 
+/**
+ * Returns a persistent UUID used as the CDP API idempotency key.
+ * Creates and saves a new one on first call; reloads on subsequent calls.
+ */
+function getOrCreateIdempotencyKey(): string {
+  if (fs.existsSync(IDEMPOTENCY_KEY_FILE)) {
+    const stored = fs.readFileSync(IDEMPOTENCY_KEY_FILE, "utf-8").trim();
+    if (stored) return stored;
+  }
+  const key = crypto.randomUUID();
+  fs.mkdirSync(path.dirname(IDEMPOTENCY_KEY_FILE), { recursive: true });
+  fs.writeFileSync(IDEMPOTENCY_KEY_FILE, key, "utf-8");
+  return key;
+}
+
+/**
+ * Wraps Coinbase.apiClients.wallet.createWallet to inject the Idempotency-Key
+ * header. Must be called after Coinbase.configure() has populated apiClients.
+ * With this header set, CDP returns the same wallet for retries within 24 hours
+ * rather than creating a new one — safe even under rate-limit restart loops.
+ */
+function patchWalletApiWithIdempotency(key: string): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const walletApi = (Coinbase as any).apiClients?.wallet;
+  if (!walletApi?.createWallet) return;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const original = walletApi.createWallet.bind(walletApi) as (...a: any[]) => unknown;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  walletApi.createWallet = (req?: unknown, opts?: any) =>
+    original(req, { ...opts, headers: { ...(opts?.headers ?? {}), "Idempotency-Key": key } });
+}
+
 // ── Boot ─────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -74,22 +115,44 @@ async function main(): Promise<void> {
 
   // 2. Load-or-create wallet ─────────────────────────────────────────────────
   const cdpWalletData = loadWalletData();
+  const mnemonicPhrase = process.env.MNEMONIC_PHRASE || undefined;
 
+  // 2a. Configure Coinbase SDK (same as what configureWithWallet does internally)
+  //     Done here so we can patch apiClients before any CreateWallet call.
+  Coinbase.configure({ apiKeyName, privateKey: apiKeyPrivateKey.replace(/\\n/g, "\n") });
+
+  // 2b. Inject a persistent idempotency key so CDP returns the same wallet on
+  //     retry within 24 hours rather than attempting to create a new one.
+  //     This is the primary defence against rate-limit restart loops.
+  const idempotencyKey = getOrCreateIdempotencyKey();
+  patchWalletApiWithIdempotency(idempotencyKey);
+
+  // 2c. Load existing wallet or create/register a new one via CDP API
+  let wallet: Wallet;
   if (cdpWalletData) {
     const msg = `Resuming existing wallet from ${WALLET_DATA_FILE}`;
     console.error("[boot]", msg);
     logBoot(msg);
-  } else {
-    const msg = "No wallet file found – a fresh MPC wallet will be created.";
+    wallet = await Wallet.import(JSON.parse(cdpWalletData));
+  } else if (mnemonicPhrase) {
+    const msg = `No wallet file found – registering deterministic wallet from mnemonic via CDP API. Idempotency key: ${idempotencyKey}`;
     console.error("[boot]", msg);
     logBoot(msg);
+    wallet = await Wallet.import({ mnemonicPhrase }, networkId);
+  } else {
+    const msg = `No wallet file found – creating new MPC wallet via CDP API. Idempotency key: ${idempotencyKey}`;
+    console.error("[boot]", msg);
+    logBoot(msg);
+    wallet = await Wallet.create({ networkId });
   }
 
+  // 2d. Wrap in CdpWalletProvider — pass wallet object directly so configureWithWallet
+  //     does not call CreateWallet again.
   const walletProvider = await CdpWalletProvider.configureWithWallet({
     apiKeyName,
     apiKeyPrivateKey,
     networkId,
-    ...(cdpWalletData ? { cdpWalletData } : {}),
+    wallet,
   });
 
   // 3. Persist immediately (also covers the first-run case) ─────────────────
