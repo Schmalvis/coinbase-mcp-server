@@ -86,28 +86,31 @@ Switch by changing `NETWORK_ID` in your env file. **Always start on testnet.**
 
 ---
 
-## Mnemonic Phrase (Recommended for New Deployments)
+## Mnemonic Phrase
 
-By default the server creates a new wallet via the Coinbase CDP API on first run (`CreateWallet`). This operation is subject to a project-level rate limit that can be exhausted by rapid container restart loops.
-
-Setting a **BIP39 mnemonic phrase** bypasses `CreateWallet` entirely — the wallet is derived locally from the seed, avoiding the API call:
+Setting a **BIP39 mnemonic phrase** makes the wallet deterministic — the same phrase always produces the same wallet address, and `wallet_data.json` becomes a cache rather than the source of truth:
 
 ```env
-# stack.env
+# stack.env (or Portainer environment variables)
 MNEMONIC_PHRASE=word1 word2 word3 ... word12
 ```
 
 **Advantages:**
-- No `CreateWallet` API call → immune to project-level rate limits
-- Wallet is fully recoverable from the phrase alone — `wallet_data.json` is a cache, not the source of truth
-- Deterministic: same phrase always produces the same wallet address
+- Wallet is fully recoverable from the phrase alone — `wallet_data.json` loss is not catastrophic
+- Deterministic: same phrase always produces the same wallet address on the same network
+
+**Important limitation:**
+The mnemonic is converted to a seed locally, but the wallet must still be **registered with Coinbase CDP** via `CreateWallet` on first run. This means:
+- The `CreateWallet` API call still happens on first boot (same as without a mnemonic)
+- If you are rate-limited on `CreateWallet`, a mnemonic does not help until the limit clears
+- Once registered, subsequent starts load from `wallet_data.json` and no API call is needed
 
 **Generating a mnemonic securely:**
 1. Go to [iancoleman.io/bip39](https://iancoleman.io/bip39) in your browser
 2. Go offline (disconnect from internet) before generating
 3. Generate a 12 or 24-word phrase
-4. Write it down on paper and store it securely — treat it like a seed phrase for a hardware wallet
-5. Set it in `stack.env` and add `MNEMONIC_PHRASE` to Portainer's environment variables
+4. Write it down on paper and store it securely — treat it like a hardware wallet seed phrase
+5. Set it via Portainer's environment variables UI (not in the committed `stack.env`)
 
 > Never store the mnemonic in the same place as your API keys or `wallet_data.json`.
 
