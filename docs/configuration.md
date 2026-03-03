@@ -25,44 +25,42 @@ The downloaded JSON file looks like:
 |----------|----------|---------|-------------|
 | `CDP_API_KEY_NAME` | ✅ | — | The `id` field from your downloaded JSON key file |
 | `CDP_API_KEY_PRIVATE_KEY` | ✅ | — | The `privateKey` field from your downloaded JSON key file (base64, paste as-is) |
+| `MNEMONIC_PHRASE` | — | — | BIP39 seed phrase for deterministic wallet (recommended — see [wallet.md](wallet.md)) |
 | `NETWORK_ID` | — | `base-sepolia` | `base-sepolia` for testnet, `base-mainnet` for real funds |
 | `WEB_PORT` | — | `3002` | Port for the built-in monitoring web UI |
 | `LOG_RETENTION_DAYS` | — | `30` | Days to retain activity log entries |
+| `WALLET_DATA_PATH` | — | Docker named volume | Absolute host path for wallet data bind mount |
 | `ACTIVITY_LOG_FILE` | — | `/app/data/activity.log` | Log file path (override for local dev/testing) |
 
 ---
 
-## Local Development — `.env`
+## Keeping Secrets Out of Git
 
-Copy the example and fill in your values:
+`stack.env` is committed to the repository with **placeholder values only** — never real credentials. There are two ways to supply the actual secrets:
+
+### Option A: Portainer environment variables UI (recommended for server deployments)
+
+In Portainer → your stack → Environment variables, add each secret variable. These take precedence over the values in `stack.env` and are stored securely in Portainer, never in git:
+
+```
+CDP_API_KEY_NAME       = a1b2c3d4e5f6...
+CDP_API_KEY_PRIVATE_KEY = MoYREDACTED...U=
+MNEMONIC_PHRASE        = word1 word2 word3 ...
+WALLET_DATA_PATH       = /home/pi/shared/docker/coinbase/data
+```
+
+### Option B: `stack.env.local` (recommended for local development)
+
+`stack.env.local` is gitignored. Copy `stack.env` to it and fill in real values:
 
 ```bash
-cp .env.example .env        # Mac/Linux
-Copy-Item .env.example .env # Windows PowerShell
+cp stack.env stack.env.local
 ```
 
-```env
-CDP_API_KEY_NAME=a1b2c3d4e5f6...
-CDP_API_KEY_PRIVATE_KEY=MoYREDACTED...U=
+Then reference it when running Compose locally:
 
-NETWORK_ID=base-sepolia
-WEB_PORT=3002
-LOG_RETENTION_DAYS=30
+```bash
+docker compose --env-file stack.env.local up -d
 ```
 
-No PEM headers. No `\n` escaping. Paste the values from the JSON file exactly as-is.
-
----
-
-## Portainer / Docker Compose — `stack.env`
-
-`stack.env` is committed to the repository with placeholder values. Fill in your real values directly in the file, or override them in Portainer's environment variable UI (preferred, keeps secrets out of git):
-
-```env
-CDP_API_KEY_NAME=a1b2c3d4e5f6...
-CDP_API_KEY_PRIVATE_KEY=MoYREDACTED...U=
-
-NETWORK_ID=base-sepolia
-WEB_PORT=3002
-LOG_RETENTION_DAYS=30
-```
+> Never put real credentials in `stack.env` itself — treat it as a public template.

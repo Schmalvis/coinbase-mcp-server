@@ -9,6 +9,8 @@ dist/
 *.env
 wallet_data.json
 !stack.env
+# Local secret overrides — copy stack.env → stack.env.local and fill in real values
+stack.env.local
 
 # Coinbase API key JSON files — NEVER commit these
 cdp_api_key*.json
