@@ -21,6 +21,28 @@ src/
 
 ---
 
+## Action Providers & Tools (38 total)
+
+| Provider | Tools |
+|---|---|
+| `walletActionProvider` | get_wallet_details, native_transfer |
+| `cdpApiActionProvider` | request_faucet_funds |
+| `cdpEvmWalletActionProvider` | get_swap_price, swap, list_spend_permissions, use_spend_permission |
+| `erc20ActionProvider` | get_balance, transfer, approve, get_allowance, get_erc20_token_address |
+| `erc721ActionProvider` | mint, transfer, get_balance |
+| `wethActionProvider` | wrap_eth, unwrap_eth |
+| `basenameActionProvider` | register_basename |
+| `compoundActionProvider` | supply, withdraw, borrow, repay, get_portfolio |
+| `morphoActionProvider` | deposit, withdraw |
+| `superfluidActionProvider` | create/update/delete stream, create/update pool, query_streams, wrap token, create super token |
+| `defillamaActionProvider` | find_protocol, get_protocol, get_token_prices |
+| `pythActionProvider` | fetch_price_feed, fetch_price |
+| `ensoActionProvider` | route _(mainnet only — unavailable on base-sepolia)_ |
+
+All tool names are prefixed with their provider class, e.g. `ERC20ActionProvider_get_balance`.
+
+---
+
 ## Key Behaviours
 
 ### Wallet Lifecycle

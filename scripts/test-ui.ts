@@ -2,7 +2,7 @@
  * Mock UI test — runs entirely without real Coinbase credentials.
  *
  * • Seeds the logger with realistic entries
- * • Starts the web server with 12 mock AgentKit tools
+ * • Starts the web server with mock AgentKit tools (matching v2 provider names)
  * • Asserts all three API endpoints return correct data
  * • Keeps the server alive so you can open the UI in a browser
  *
@@ -28,148 +28,47 @@ if (fs.existsSync(TEST_LOG_FILE)) fs.unlinkSync(TEST_LOG_FILE);
 const { writeLog } = await import("../src/logger.js");
 const { startWebServer } = await import("../src/webServer.js");
 
-// ── Mock tools (mirrors real AgentKit tool shapes) ────────────────────────────
+// ── Mock tools (mirrors real v2 AgentKit tool shapes) ─────────────────────────
 
 const MOCK_TOOLS = [
-  {
-    name: "get_wallet_details",
-    description: "Retrieves the details of the connected MPC wallet including address and network.",
-    inputSchema: { type: "object", properties: {}, required: [] },
-  },
-  {
-    name: "get_balance",
-    description: "Gets the balance of a specific asset in the wallet.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        asset_id: { type: "string", description: "Asset symbol, e.g. ETH, USDC" },
-      },
-      required: ["asset_id"],
-    },
-  },
-  {
-    name: "request_faucet_funds",
-    description: "Requests test tokens from the network faucet (testnet only).",
-    inputSchema: {
-      type: "object",
-      properties: {
-        asset_id: { type: "string", description: "Asset to request, e.g. ETH" },
-      },
-      required: [],
-    },
-  },
-  {
-    name: "transfer",
-    description: "Transfers an amount of a given asset to a destination address.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        amount:           { type: "string",  description: "Amount to transfer" },
-        asset_id:         { type: "string",  description: "Asset symbol or contract address" },
-        destination:      { type: "string",  description: "Recipient address or ENS name" },
-        gasless:          { type: "boolean", description: "Use gasless transfer if supported" },
-      },
-      required: ["amount", "asset_id", "destination"],
-    },
-  },
-  {
-    name: "trade",
-    description: "Trades one asset for another using an on-chain DEX.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        amount:         { type: "string", description: "Amount of from_asset_id to trade" },
-        from_asset_id:  { type: "string", description: "Source asset" },
-        to_asset_id:    { type: "string", description: "Target asset" },
-      },
-      required: ["amount", "from_asset_id", "to_asset_id"],
-    },
-  },
-  {
-    name: "deploy_token",
-    description: "Deploys a new ERC-20 token contract.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        name:             { type: "string", description: "Token name" },
-        symbol:           { type: "string", description: "Token symbol" },
-        total_supply:     { type: "string", description: "Total supply (in whole tokens)" },
-      },
-      required: ["name", "symbol", "total_supply"],
-    },
-  },
-  {
-    name: "deploy_nft",
-    description: "Deploys an ERC-721 NFT collection contract.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        name:      { type: "string", description: "Collection name" },
-        symbol:    { type: "string", description: "Collection symbol" },
-        base_uri:  { type: "string", description: "Metadata base URI" },
-      },
-      required: ["name", "symbol", "base_uri"],
-    },
-  },
-  {
-    name: "mint_nft",
-    description: "Mints an NFT from an existing ERC-721 contract to a destination address.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        contract_address: { type: "string", description: "NFT contract address" },
-        destination:      { type: "string", description: "Recipient address" },
-      },
-      required: ["contract_address", "destination"],
-    },
-  },
-  {
-    name: "wrap_eth",
-    description: "Wraps ETH into WETH (ERC-20) at a 1:1 ratio.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        amount_to_wrap: { type: "string", description: "Amount of ETH to wrap" },
-      },
-      required: ["amount_to_wrap"],
-    },
-  },
-  {
-    name: "get_asset_price",
-    description: "Fetches the current USD price of an on-chain asset.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        asset_id: { type: "string", description: "Asset symbol, e.g. BTC, ETH, USDC" },
-      },
-      required: ["asset_id"],
-    },
-  },
-  {
-    name: "register_basename",
-    description: "Registers a Basename (Base-native ENS subdomain) for the wallet address.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        basename: { type: "string", description: "Desired name, e.g. myname.base.eth" },
-        amount:   { type: "string", description: "Registration fee in ETH" },
-      },
-      required: ["basename", "amount"],
-    },
-  },
-  {
-    name: "wow_create_token",
-    description: "Creates a WOW protocol memecoin with a built-in bonding curve.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        name:      { type: "string", description: "Token name" },
-        symbol:    { type: "string", description: "Token ticker" },
-        token_uri: { type: "string", description: "IPFS URI for token metadata/image" },
-      },
-      required: ["name", "symbol", "token_uri"],
-    },
-  },
+  { name: "WalletActionProvider_get_wallet_details",           description: "Returns wallet address, network, chain ID, and native token balance.", inputSchema: { type: "object", properties: {}, required: [] } },
+  { name: "WalletActionProvider_native_transfer",              description: "Transfers native tokens (ETH) to another address.", inputSchema: { type: "object", properties: { to: { type: "string" }, value: { type: "string" } }, required: ["to", "value"] } },
+  { name: "CdpApiActionProvider_request_faucet_funds",         description: "Requests test tokens from the faucet (testnet only).", inputSchema: { type: "object", properties: { assetId: { type: "string" } }, required: [] } },
+  { name: "CdpEvmWalletActionProvider_get_swap_price",         description: "Gets a swap price quote between two tokens.", inputSchema: { type: "object", properties: { fromAsset: { type: "string" }, toAsset: { type: "string" }, amount: { type: "string" } }, required: ["fromAsset", "toAsset", "amount"] } },
+  { name: "CdpEvmWalletActionProvider_swap",                   description: "Executes a token swap on-chain.", inputSchema: { type: "object", properties: { fromAsset: { type: "string" }, toAsset: { type: "string" }, amount: { type: "string" } }, required: ["fromAsset", "toAsset", "amount"] } },
+  { name: "CdpEvmWalletActionProvider_list_spend_permissions", description: "Lists active spend permissions for the wallet.", inputSchema: { type: "object", properties: {}, required: [] } },
+  { name: "CdpEvmWalletActionProvider_use_spend_permission",   description: "Uses a spend permission to transfer tokens.", inputSchema: { type: "object", properties: { permissionId: { type: "string" }, amount: { type: "string" } }, required: ["permissionId", "amount"] } },
+  { name: "ERC20ActionProvider_get_balance",                   description: "Gets the ERC-20 token balance for an address.", inputSchema: { type: "object", properties: { contractAddress: { type: "string" }, address: { type: "string" } }, required: ["contractAddress"] } },
+  { name: "ERC20ActionProvider_transfer",                      description: "Transfers ERC-20 tokens to another address.", inputSchema: { type: "object", properties: { contractAddress: { type: "string" }, to: { type: "string" }, amount: { type: "string" } }, required: ["contractAddress", "to", "amount"] } },
+  { name: "ERC20ActionProvider_approve",                       description: "Approves a spender to use ERC-20 tokens.", inputSchema: { type: "object", properties: { contractAddress: { type: "string" }, spender: { type: "string" }, amount: { type: "string" } }, required: ["contractAddress", "spender", "amount"] } },
+  { name: "ERC20ActionProvider_get_allowance",                 description: "Gets the ERC-20 allowance for an owner/spender pair.", inputSchema: { type: "object", properties: { contractAddress: { type: "string" }, owner: { type: "string" }, spender: { type: "string" } }, required: ["contractAddress", "owner", "spender"] } },
+  { name: "ERC20ActionProvider_get_erc20_token_address",       description: "Resolves a token symbol to its contract address.", inputSchema: { type: "object", properties: { symbol: { type: "string" } }, required: ["symbol"] } },
+  { name: "Erc721ActionProvider_mint",                         description: "Mints an NFT from an ERC-721 contract.", inputSchema: { type: "object", properties: { contractAddress: { type: "string" }, to: { type: "string" } }, required: ["contractAddress", "to"] } },
+  { name: "Erc721ActionProvider_transfer",                     description: "Transfers an ERC-721 NFT to another address.", inputSchema: { type: "object", properties: { contractAddress: { type: "string" }, to: { type: "string" }, tokenId: { type: "string" } }, required: ["contractAddress", "to", "tokenId"] } },
+  { name: "Erc721ActionProvider_get_balance",                  description: "Gets the NFT balance for an address.", inputSchema: { type: "object", properties: { contractAddress: { type: "string" }, address: { type: "string" } }, required: ["contractAddress"] } },
+  { name: "WethActionProvider_wrap_eth",                       description: "Wraps ETH into WETH at a 1:1 ratio.", inputSchema: { type: "object", properties: { amount: { type: "string" } }, required: ["amount"] } },
+  { name: "WethActionProvider_unwrap_eth",                     description: "Unwraps WETH back to ETH.", inputSchema: { type: "object", properties: { amount: { type: "string" } }, required: ["amount"] } },
+  { name: "BasenameActionProvider_register_basename",          description: "Registers a Basename (Base ENS subdomain) for the wallet.", inputSchema: { type: "object", properties: { name: { type: "string" }, amount: { type: "string" } }, required: ["name", "amount"] } },
+  { name: "CompoundActionProvider_supply",                     description: "Supplies an asset to Compound V3 to earn interest.", inputSchema: { type: "object", properties: { asset: { type: "string" }, amount: { type: "string" } }, required: ["asset", "amount"] } },
+  { name: "CompoundActionProvider_withdraw",                   description: "Withdraws a supplied asset from Compound V3.", inputSchema: { type: "object", properties: { asset: { type: "string" }, amount: { type: "string" } }, required: ["asset", "amount"] } },
+  { name: "CompoundActionProvider_borrow",                     description: "Borrows an asset from Compound V3.", inputSchema: { type: "object", properties: { asset: { type: "string" }, amount: { type: "string" } }, required: ["asset", "amount"] } },
+  { name: "CompoundActionProvider_repay",                      description: "Repays a Compound V3 borrow position.", inputSchema: { type: "object", properties: { asset: { type: "string" }, amount: { type: "string" } }, required: ["asset", "amount"] } },
+  { name: "CompoundActionProvider_get_portfolio",              description: "Gets the current Compound V3 portfolio summary.", inputSchema: { type: "object", properties: {}, required: [] } },
+  { name: "MorphoActionProvider_deposit",                      description: "Deposits assets into a Morpho vault.", inputSchema: { type: "object", properties: { vault: { type: "string" }, amount: { type: "string" } }, required: ["vault", "amount"] } },
+  { name: "MorphoActionProvider_withdraw",                     description: "Withdraws assets from a Morpho vault.", inputSchema: { type: "object", properties: { vault: { type: "string" }, amount: { type: "string" } }, required: ["vault", "amount"] } },
+  { name: "SuperfluidStreamActionProvider_create_stream",      description: "Creates a Superfluid token stream.", inputSchema: { type: "object", properties: { token: { type: "string" }, receiver: { type: "string" }, flowRate: { type: "string" } }, required: ["token", "receiver", "flowRate"] } },
+  { name: "SuperfluidStreamActionProvider_update_stream",      description: "Updates the flow rate of an existing Superfluid stream.", inputSchema: { type: "object", properties: { token: { type: "string" }, receiver: { type: "string" }, flowRate: { type: "string" } }, required: ["token", "receiver", "flowRate"] } },
+  { name: "SuperfluidStreamActionProvider_delete_stream",      description: "Deletes a Superfluid token stream.", inputSchema: { type: "object", properties: { token: { type: "string" }, receiver: { type: "string" } }, required: ["token", "receiver"] } },
+  { name: "SuperfluidPoolActionProvider_create_pool",          description: "Creates a Superfluid distribution pool.", inputSchema: { type: "object", properties: { token: { type: "string" } }, required: ["token"] } },
+  { name: "SuperfluidPoolActionProvider_update_pool",          description: "Updates a Superfluid distribution pool.", inputSchema: { type: "object", properties: { poolAddress: { type: "string" } }, required: ["poolAddress"] } },
+  { name: "SuperfluidQueryActionProvider_query_streams",       description: "Queries active Superfluid streams.", inputSchema: { type: "object", properties: { account: { type: "string" } }, required: [] } },
+  { name: "SuperfluidWrapperActionProvider_wrap_superfluid_token",       description: "Wraps a token into its Superfluid super token.", inputSchema: { type: "object", properties: { token: { type: "string" }, amount: { type: "string" } }, required: ["token", "amount"] } },
+  { name: "SuperfluidSuperTokenCreatorActionProvider_create_super_token", description: "Creates a new Superfluid super token.", inputSchema: { type: "object", properties: { name: { type: "string" }, symbol: { type: "string" } }, required: ["name", "symbol"] } },
+  { name: "DefiLlamaActionProvider_find_protocol",             description: "Searches DeFi Llama for protocols by name.", inputSchema: { type: "object", properties: { name: { type: "string" } }, required: ["name"] } },
+  { name: "DefiLlamaActionProvider_get_protocol",              description: "Gets detailed info about a DeFi protocol.", inputSchema: { type: "object", properties: { slug: { type: "string" } }, required: ["slug"] } },
+  { name: "DefiLlamaActionProvider_get_token_prices",          description: "Gets current prices for tokens from DeFi Llama.", inputSchema: { type: "object", properties: { tokens: { type: "array", items: { type: "string" } } }, required: ["tokens"] } },
+  { name: "PythActionProvider_fetch_price_feed",               description: "Fetches a Pyth price feed ID for an asset.", inputSchema: { type: "object", properties: { symbol: { type: "string" } }, required: ["symbol"] } },
+  { name: "PythActionProvider_fetch_price",                    description: "Fetches the current price of an asset from Pyth.", inputSchema: { type: "object", properties: { feedId: { type: "string" } }, required: ["feedId"] } },
 ];
 
 // ── Seed the activity log ─────────────────────────────────────────────────────
@@ -179,21 +78,22 @@ function past(minutesAgo: number): string {
 }
 
 const SEED_ENTRIES = [
-  { ts: past(47), level: "info",  event: "boot",         message: "Resuming existing wallet from /app/data/wallet_data.json" },
-  { ts: past(46), level: "info",  event: "boot",         message: "Loaded 12 AgentKit tool(s).", data: { toolCount: 12, network: "base-sepolia" } },
-  { ts: past(46), level: "info",  event: "server_ready", message: "MCP server ready. 12 tool(s) available on base-sepolia.", data: { toolCount: 12, network: "base-sepolia" } },
-  { ts: past(38), level: "info",  event: "tool_call",    message: "Tool called: get_wallet_details", data: { tool: "get_wallet_details", args: {} } },
-  { ts: past(38), level: "info",  event: "tool_result",  message: "Tool succeeded: get_wallet_details (312ms)", data: { tool: "get_wallet_details", success: true, durationMs: 312 } },
-  { ts: past(30), level: "info",  event: "tool_call",    message: "Tool called: get_balance", data: { tool: "get_balance", args: { asset_id: "ETH" } } },
-  { ts: past(30), level: "info",  event: "tool_result",  message: "Tool succeeded: get_balance (289ms)", data: { tool: "get_balance", success: true, durationMs: 289 } },
-  { ts: past(22), level: "info",  event: "tool_call",    message: "Tool called: request_faucet_funds", data: { tool: "request_faucet_funds", args: {} } },
-  { ts: past(22), level: "info",  event: "tool_result",  message: "Tool succeeded: request_faucet_funds (4821ms)", data: { tool: "request_faucet_funds", success: true, durationMs: 4821 } },
-  { ts: past(15), level: "info",  event: "tool_call",    message: "Tool called: transfer", data: { tool: "transfer", args: { amount: "0.001", asset_id: "ETH", destination: "0xAbc…" } } },
-  { ts: past(15), level: "warn",  event: "tool_error",   message: "Tool failed: transfer (1203ms)", data: { tool: "transfer", success: false, durationMs: 1203 } },
-  { ts: past(8),  level: "info",  event: "tool_call",    message: "Tool called: get_asset_price", data: { tool: "get_asset_price", args: { asset_id: "BTC" } } },
-  { ts: past(8),  level: "info",  event: "tool_result",  message: "Tool succeeded: get_asset_price (198ms)", data: { tool: "get_asset_price", success: true, durationMs: 198 } },
-  { ts: past(2),  level: "info",  event: "tool_call",    message: "Tool called: trade", data: { tool: "trade", args: { amount: "0.01", from_asset_id: "ETH", to_asset_id: "USDC" } } },
-  { ts: past(2),  level: "info",  event: "tool_result",  message: "Tool succeeded: trade (3547ms)", data: { tool: "trade", success: true, durationMs: 3547 } },
+  { ts: past(47), level: "info",  event: "boot",         message: "Configuring CdpEvmWalletProvider on base-sepolia" },
+  { ts: past(47), level: "info",  event: "boot",         message: "Wallet address: 0x510D2b204A4496D34fee7EFbF563dACE3C441b7f", data: { address: "0x510D2b204A4496D34fee7EFbF563dACE3C441b7f", network: "base-sepolia" } },
+  { ts: past(46), level: "info",  event: "boot",         message: `Loaded ${MOCK_TOOLS.length} AgentKit tool(s).`, data: { toolCount: MOCK_TOOLS.length, network: "base-sepolia" } },
+  { ts: past(46), level: "info",  event: "server_ready", message: `MCP server ready. ${MOCK_TOOLS.length} tool(s) available on base-sepolia.`, data: { toolCount: MOCK_TOOLS.length, network: "base-sepolia" } },
+  { ts: past(38), level: "info",  event: "tool_call",    message: "Tool called: WalletActionProvider_get_wallet_details", data: { tool: "WalletActionProvider_get_wallet_details", args: {} } },
+  { ts: past(38), level: "info",  event: "tool_result",  message: "Tool succeeded: WalletActionProvider_get_wallet_details (312ms)", data: { tool: "WalletActionProvider_get_wallet_details", success: true, durationMs: 312 } },
+  { ts: past(30), level: "info",  event: "tool_call",    message: "Tool called: ERC20ActionProvider_get_balance", data: { tool: "ERC20ActionProvider_get_balance", args: { contractAddress: "0xabc…", } } },
+  { ts: past(30), level: "info",  event: "tool_result",  message: "Tool succeeded: ERC20ActionProvider_get_balance (289ms)", data: { tool: "ERC20ActionProvider_get_balance", success: true, durationMs: 289 } },
+  { ts: past(22), level: "info",  event: "tool_call",    message: "Tool called: CdpApiActionProvider_request_faucet_funds", data: { tool: "CdpApiActionProvider_request_faucet_funds", args: {} } },
+  { ts: past(22), level: "info",  event: "tool_result",  message: "Tool succeeded: CdpApiActionProvider_request_faucet_funds (4821ms)", data: { tool: "CdpApiActionProvider_request_faucet_funds", success: true, durationMs: 4821 } },
+  { ts: past(15), level: "info",  event: "tool_call",    message: "Tool called: WalletActionProvider_native_transfer", data: { tool: "WalletActionProvider_native_transfer", args: { to: "0xAbc…", value: "0.001" } } },
+  { ts: past(15), level: "warn",  event: "tool_error",   message: "Tool failed: WalletActionProvider_native_transfer (1203ms)", data: { tool: "WalletActionProvider_native_transfer", success: false, durationMs: 1203 } },
+  { ts: past(8),  level: "info",  event: "tool_call",    message: "Tool called: PythActionProvider_fetch_price", data: { tool: "PythActionProvider_fetch_price", args: { feedId: "BTC/USD" } } },
+  { ts: past(8),  level: "info",  event: "tool_result",  message: "Tool succeeded: PythActionProvider_fetch_price (198ms)", data: { tool: "PythActionProvider_fetch_price", success: true, durationMs: 198 } },
+  { ts: past(2),  level: "info",  event: "tool_call",    message: "Tool called: CdpEvmWalletActionProvider_swap", data: { tool: "CdpEvmWalletActionProvider_swap", args: { fromAsset: "ETH", toAsset: "USDC", amount: "0.01" } } },
+  { ts: past(2),  level: "info",  event: "tool_result",  message: "Tool succeeded: CdpEvmWalletActionProvider_swap (3547ms)", data: { tool: "CdpEvmWalletActionProvider_swap", success: true, durationMs: 3547 } },
 ] as const;
 
 for (const entry of SEED_ENTRIES) {
@@ -243,7 +143,7 @@ try {
   assert("GET /api/tools  →  200",     toolsRes.status === 200);
   assert("GET /api/tools  →  JSON",    toolsRes.headers.get("content-type")?.includes("application/json") ?? false);
   const tools = await toolsRes.json() as Array<{ name: string; description: string; inputSchema: unknown }>;
-  assert("GET /api/tools  →  12 tools", tools.length === MOCK_TOOLS.length, `got ${tools.length}`);
+  assert(`GET /api/tools  →  ${MOCK_TOOLS.length} tools`, tools.length === MOCK_TOOLS.length, `got ${tools.length}`);
   assert("GET /api/tools  →  tools have name",        tools.every(t => typeof t.name === "string" && t.name.length > 0));
   assert("GET /api/tools  →  tools have description", tools.every(t => typeof t.description === "string"));
   assert("GET /api/tools  →  tools have inputSchema",  tools.every(t => t.inputSchema !== undefined));
