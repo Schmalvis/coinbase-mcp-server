@@ -1,0 +1,135 @@
+{
+  "createdAt": "2025-08-01T16:47:10.837Z",
+  "updatedAt": "2025-08-04T18:23:24.000Z",
+  "id": "O1xeqGgEIbYFx6mk",
+  "name": "Coinbase Bot",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -752,
+        -64
+      ],
+      "id": "cddc21aa-4948-40cf-904d-dac8e62f258f",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-coinbase.coinbase",
+      "typeVersion": 1,
+      "position": [
+        -528,
+        -64
+      ],
+      "id": "7eae6deb-4cda-4ce6-bcdd-8f34d2153c06",
+      "name": "Get all accounts",
+      "credentials": {
+        "coinbaseApi": {
+          "id": "F8FmzICu4fePvAZz",
+          "name": "Coinbase API Read/Trade"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://newsapi.org/v2/everything",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "={{ $json.ticker }}"
+            },
+            {
+              "name": "from",
+              "value": "={{$today.minus({ days: 1 }).toFormat('yyyy-MM-dd') }}"
+            },
+            {
+              "name": "apiKey",
+              "value": "9eb579bdc6c94251893876f6892ea84d"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -528,
+        128
+      ],
+      "id": "458d4430-1a5b-4be4-afc1-d8e2b938462b",
+      "name": "getNews"
+    },
+    {
+      "parameters": {
+        "url": "https://api.cdp.coinbase.com/platform/v2/evm/accounts?pageSize=20",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "coinbaseApi",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -528,
+        -272
+      ],
+      "id": "a02cdcb1-1e94-4751-a9b5-a5c347309039",
+      "name": "HTTP Request",
+      "credentials": {
+        "coinbaseApi": {
+          "id": "F8FmzICu4fePvAZz",
+          "name": "Coinbase API Read/Trade"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Get all accounts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get all accounts": {
+      "main": [
+        []
+      ]
+    },
+    "getNews": {
+      "main": [
+        []
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "versionId": "47dcf5fb-ba03-4a34-8a19-58aa85732042",
+  "triggerCount": 0,
+  "tags": []
+}

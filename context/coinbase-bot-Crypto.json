@@ -1,0 +1,498 @@
+{
+  "updatedAt": "2025-08-28T18:53:43.000Z",
+  "createdAt": "2025-08-01T16:47:10.837Z",
+  "id": "O1xeqGgEIbYFx6mk",
+  "name": "Coinbase Bot",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -896,
+        -96
+      ],
+      "id": "cddc21aa-4948-40cf-904d-dac8e62f258f",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-coinbase.coinbase",
+      "typeVersion": 1,
+      "position": [
+        -560,
+        -48
+      ],
+      "id": "7eae6deb-4cda-4ce6-bcdd-8f34d2153c06",
+      "name": "Get all accounts",
+      "alwaysOutputData": false,
+      "notesInFlow": false,
+      "credentials": {
+        "coinbaseApi": {
+          "id": "F8FmzICu4fePvAZz",
+          "name": "Coinbase API Read/Trade"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7f11cd84-579d-4034-9e21-de72894e6e4c",
+              "leftValue": "={{ $json.value }}",
+              "rightValue": "0",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        240,
+        -16
+      ],
+      "id": "b3b75aec-3026-40ac-9241-d12284a7f3c8",
+      "name": "RemoveZero"
+    },
+    {
+      "parameters": {
+        "jsCode": "const accounts = $json.accounts || [];\nconst filteredAccounts = accounts.map(account => ({\n  name: account.name,\n  currency: account.currency,\n  availableValue: account.available_balance.value,\n  holdValue: account.hold.value,\n  uuid: account.uuid,\n  portfolioId: account.retail_portfolio_id\n}));\n\nreturn[\n  {\n    json: {\n      filteredAccounts\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -144,
+        -16
+      ],
+      "id": "7a6c5196-e103-4aaf-b7e9-650c9356fb68",
+      "name": "filteredAccounts"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "filteredAccounts",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        32,
+        -16
+      ],
+      "id": "786e8180-036f-4fd3-9791-6adf800ace08",
+      "name": "Split"
+    },
+    {
+      "parameters": {
+        "jsCode": "const { generateJwt } = require(\"@coinbase/cdp-sdk/auth\");\n\n  // Generate the JWT using the CDP SDK\n  const token = await generateJwt({\n    apiKeyId: $input.first().json.keyID,\n    apiKeySecret: $input.first().json.keySec,\n    requestMethod: $input.first().json.reqMeth,\n    requestHost: $input.first().json.host,\n    requestPath: $input.first().json.path,\n    expiresIn: $input.first().json.expiry // optional (defaults to 120 seconds)\n  });\n\nconsole.log(token);\n\nreturn[\n  {\n    json: {\n      method: $input.first().json.reqMeth,\n      url: \"https://\" + $input.first().json.host + $input.first().json.path,\n      token: token\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -16,
+        -352
+      ],
+      "id": "3a39284b-2548-40ba-834f-41e9a7fd88b3",
+      "name": "generateJWT-Bearer"
+    },
+    {
+      "parameters": {
+        "jsCode": "const walletSecret=\"your-wallet-secret\"\nconst requestMethod=\"POST\"\nconst requestPath=\"/platform/v2/evm/accounts/0x742d35Cc6634C0532925a3b844Bc454e4438f44e/sign/transaction\"\nconst requestHost=\"api.cdp.coinbase.com\"\nconst requestBody='{\"transaction\": \"0x1234567890123456789012345678901234567890\"}'\n\nconst jose = require('jose');\nconst crypto = require('crypto');\n\n// Create the JWT payload\nconst now = Math.floor(Date.now() / 1000);\nconst uri = `${requestMethod} ${requestHost}${requestPath}`;\n\nconst payload = {\n  iat: now,\n  nbf: now,\n  jti: crypto.randomBytes(16).toString('hex'),\n  uris: [uri]\n};\n\nfunction sortKeys(obj) {\n  if (!obj || typeof obj !== \"object\") {\n    return obj;\n  }\n\n  if (Array.isArray(obj)) {\n    return obj.map(sortKeys);\n  }\n\n  return Object.keys(obj)\n    .sort()\n    .reduce(\n      (acc, key) => {\n        acc[key] = sortKeys(obj[key]);\n        return acc;\n      },\n      {},\n    );\n}\n\n// Add request body if present\nif (requestBody) {\n  const sortedBody = sortKeys(JSON.parse(requestBody));\n  payload.reqHash = crypto\n    .createHash('sha256')\n    .update(Buffer.from(JSON.stringify(sortedBody)))\n    .digest('hex');\n}\n\n// Generate the JWT\nconst getJWT = (async () => {\n  const ecKey = crypto.createPrivateKey({\n    key: walletSecret,\n    format: \"der\",\n    type: \"pkcs8\",\n    encoding: \"base64\",\n  });\n\n  // Sign JWT\n  const jwt = await new jose.SignJWT(payload)\n    .setProtectedHeader({ alg: 'ES256', typ: 'JWT' })\n    .sign(ecKey);\n\n  return jwt;\n})();\n\nreturn[\n  {\n    json: {\n      walletJWT: getJWT()\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        -160
+      ],
+      "id": "4036934e-1132-430d-b79f-29eeaba0c445",
+      "name": "generateJWT-Wallet"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "44563247-df88-44e6-841b-b95c7fd6b979",
+              "name": "reqMeth",
+              "value": "GET",
+              "type": "string"
+            },
+            {
+              "id": "9b59a4cc-f84a-4395-b2f3-67ed2e52dfe8",
+              "name": "keyID",
+              "value": "={{ $json.KEYID }}",
+              "type": "string"
+            },
+            {
+              "id": "708ae370-b5d2-4503-a766-b90a92d2c5f3",
+              "name": "keySec",
+              "value": "={{ $json.KEYSEC }}",
+              "type": "string"
+            },
+            {
+              "id": "390588a4-7e82-4cc4-9641-f226faa17df0",
+              "name": "host",
+              "value": "api.coinbase.com",
+              "type": "string"
+            },
+            {
+              "id": "7a0f856c-51f3-41f5-b76b-a342b06aa356",
+              "name": "path",
+              "value": "/api/v3/brokerage/payment_methods",
+              "type": "string"
+            },
+            {
+              "id": "847e9af9-5dda-45e2-b67d-27d2b7c39cb1",
+              "name": "expiry",
+              "value": 120,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -240,
+        -352
+      ],
+      "id": "43f2b727-a4d8-44e4-b30b-4a17f871b12a",
+      "name": "Bearer-defaults"
+    },
+    {
+      "parameters": {
+        "method": "={{ $json.method }}",
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.token }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          },
+          "response": {
+            "response": {}
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        192,
+        -352
+      ],
+      "id": "de37b5cf-c5ae-4a8e-b2e7-8acddd52c3cd",
+      "name": "coin test"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3139b5fa-4390-4ee3-92bd-c8630d34ac2f",
+              "name": "KEYID",
+              "value": "c7150193-47e4-455e-981f-408b8029676a",
+              "type": "string"
+            },
+            {
+              "id": "33101dfe-225d-4496-8e91-a85704198e48",
+              "name": "KEYSEC",
+              "value": "p92a2H1ceivj3Z7RSbSV+1ZBnZ37I+ZpVLtGeokDwok8cYkcK7B4GM4MUnVvHCQHMST/AepM/1TWNCbYdXhNZg==",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -512,
+        -400
+      ],
+      "id": "f2a7c42a-8dfb-462a-8a82-7d5d538770b9",
+      "name": "setAPIkey"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "44563247-df88-44e6-841b-b95c7fd6b979",
+              "name": "reqMeth",
+              "value": "GET",
+              "type": "string"
+            },
+            {
+              "id": "9b59a4cc-f84a-4395-b2f3-67ed2e52dfe8",
+              "name": "keyID",
+              "value": "={{ $json.KEYID }}",
+              "type": "string"
+            },
+            {
+              "id": "708ae370-b5d2-4503-a766-b90a92d2c5f3",
+              "name": "keySec",
+              "value": "={{ $json.KEYSEC }}",
+              "type": "string"
+            },
+            {
+              "id": "390588a4-7e82-4cc4-9641-f226faa17df0",
+              "name": "host",
+              "value": "api.cdp.coinbase.com",
+              "type": "string"
+            },
+            {
+              "id": "7a0f856c-51f3-41f5-b76b-a342b06aa356",
+              "name": "path",
+              "value": "/platform/v1/wallets",
+              "type": "string"
+            },
+            {
+              "id": "847e9af9-5dda-45e2-b67d-27d2b7c39cb1",
+              "name": "expiry",
+              "value": 120,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -240,
+        -512
+      ],
+      "id": "08404d2a-910c-4112-9e70-34ef6ace550f",
+      "name": "Bearer-defaults1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const { generateJwt } = require(\"@coinbase/cdp-sdk/auth\");\n\n  // Generate the JWT using the CDP SDK\n  const token = await generateJwt({\n    apiKeyId: $input.first().json.keyID,\n    apiKeySecret: $input.first().json.keySec,\n    requestMethod: $input.first().json.reqMeth,\n    requestHost: $input.first().json.host,\n    requestPath: $input.first().json.path,\n    expiresIn: $input.first().json.expiry // optional (defaults to 120 seconds)\n  });\n\nconsole.log(token);\n\nreturn[\n  {\n    json: {\n      method: $input.first().json.reqMeth,\n      url: \"https://\" + $input.first().json.host + $input.first().json.path,\n      token: token\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -16,
+        -512
+      ],
+      "id": "559e194f-b50f-4c3c-8155-776f45a57174",
+      "name": "generateJWT-Bearer1"
+    },
+    {
+      "parameters": {
+        "method": "={{ $json.method }}",
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.token }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          },
+          "response": {
+            "response": {}
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        192,
+        -512
+      ],
+      "id": "7705781c-fdb8-4fb1-b9d8-15c76f37e7f8",
+      "name": "coin test1"
+    }
+  ],
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Get all accounts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "setAPIkey",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get all accounts": {
+      "main": [
+        [
+          {
+            "node": "filteredAccounts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RemoveZero": {
+      "main": [
+        []
+      ]
+    },
+    "filteredAccounts": {
+      "main": [
+        [
+          {
+            "node": "Split",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split": {
+      "main": [
+        [
+          {
+            "node": "RemoveZero",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "generateJWT-Bearer": {
+      "main": [
+        [
+          {
+            "node": "coin test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bearer-defaults": {
+      "main": [
+        [
+          {
+            "node": "generateJWT-Bearer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "coin test": {
+      "main": [
+        []
+      ]
+    },
+    "setAPIkey": {
+      "main": [
+        [
+          {
+            "node": "Bearer-defaults",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Bearer-defaults1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bearer-defaults1": {
+      "main": [
+        [
+          {
+            "node": "generateJWT-Bearer1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "generateJWT-Bearer1": {
+      "main": [
+        [
+          {
+            "node": "coin test1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "versionId": "ad06bab1-f8a9-4bf2-84cb-c483f6d29aeb",
+  "activeVersionId": null,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2025-08-01T16:47:10.840Z",
+      "createdAt": "2025-08-01T16:47:10.840Z",
+      "role": "workflow:owner",
+      "workflowId": "O1xeqGgEIbYFx6mk",
+      "projectId": "eS51tSY21KvkqDWN"
+    }
+  ],
+  "activeVersion": null,
+  "tags": [
+    {
+      "updatedAt": "2025-08-10T17:29:52.122Z",
+      "createdAt": "2025-08-10T17:29:52.122Z",
+      "id": "tG20dnv6rnra0rFw",
+      "name": "Crypto"
+    }
+  ]
+}

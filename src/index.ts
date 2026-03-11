@@ -1,4 +1,4 @@
-import { AgentKit, CdpWalletProvider } from "@coinbase/agentkit";
+import { AgentKit, LegacyCdpWalletProvider as CdpWalletProvider } from "@coinbase/agentkit";
 import { getMcpTools } from "@coinbase/agentkit-model-context-protocol";
 import { Coinbase, Wallet } from "@coinbase/coinbase-sdk";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -149,8 +149,8 @@ async function main(): Promise<void> {
   // 2d. Wrap in CdpWalletProvider — pass wallet object directly so configureWithWallet
   //     does not call CreateWallet again.
   const walletProvider = await CdpWalletProvider.configureWithWallet({
-    apiKeyName,
-    apiKeyPrivateKey,
+    apiKeyId: apiKeyName,
+    apiKeySecret: apiKeyPrivateKey,
     networkId,
     wallet,
   });

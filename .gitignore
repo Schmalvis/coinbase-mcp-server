@@ -20,3 +20,6 @@ cdp_api_key*.json
 Thumbs.db
 *.swp
 .vscode/settings.json
+
+# Custom directories to be excluded
+# context/
