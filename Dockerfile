@@ -8,7 +8,7 @@ WORKDIR /app
 # Copy manifests first — this layer is cached unless deps change
 COPY package.json package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm \
-    npm ci
+    npm ci --ignore-scripts
 
 # Compile TypeScript → dist/
 COPY tsconfig.json ./
@@ -28,7 +28,7 @@ RUN mkdir -p /app/data && chown node:node /app/data
 # Install production-only dependencies
 COPY package.json package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm \
-    npm ci --omit=dev
+    npm ci --omit=dev --ignore-scripts
 
 # Copy compiled output from the builder stage
 COPY --from=builder /app/dist ./dist
