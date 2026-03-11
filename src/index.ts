@@ -1,4 +1,24 @@
-import { AgentKit, CdpEvmWalletProvider } from "@coinbase/agentkit";
+import {
+  AgentKit,
+  CdpEvmWalletProvider,
+  basenameActionProvider,
+  cdpApiActionProvider,
+  cdpEvmWalletActionProvider,
+  compoundActionProvider,
+  defillamaActionProvider,
+  ensoActionProvider,
+  erc20ActionProvider,
+  erc721ActionProvider,
+  morphoActionProvider,
+  pythActionProvider,
+  superfluidPoolActionProvider,
+  superfluidQueryActionProvider,
+  superfluidStreamActionProvider,
+  superfluidSuperTokenCreatorActionProvider,
+  superfluidWrapperActionProvider,
+  walletActionProvider,
+  wethActionProvider,
+} from "@coinbase/agentkit";
 import { getMcpTools } from "@coinbase/agentkit-model-context-protocol";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -55,7 +75,28 @@ async function main(): Promise<void> {
   logBoot(addrMsg, { address, network: networkId });
 
   // 3. Initialise AgentKit ───────────────────────────────────────────────────
-  const agentKit = await AgentKit.from({ walletProvider });
+  const agentKit = await AgentKit.from({
+    walletProvider,
+    actionProviders: [
+      walletActionProvider(),
+      cdpApiActionProvider(),
+      cdpEvmWalletActionProvider(),
+      erc20ActionProvider(),
+      erc721ActionProvider(),
+      wethActionProvider(),
+      basenameActionProvider(),
+      compoundActionProvider(),
+      ensoActionProvider(),
+      morphoActionProvider(),
+      superfluidStreamActionProvider(),
+      superfluidPoolActionProvider(),
+      superfluidQueryActionProvider(),
+      superfluidWrapperActionProvider(),
+      superfluidSuperTokenCreatorActionProvider(),
+      defillamaActionProvider(),
+      pythActionProvider(),
+    ],
+  });
 
   // 4. Obtain MCP tool definitions + unified handler from AgentKit ──────────
   const { tools, toolHandler } = await getMcpTools(agentKit);
