@@ -24,10 +24,9 @@ src/
 ## Key Behaviours
 
 ### Wallet Lifecycle
-- Wallet data persisted to `/app/data/wallet_data.json`
-- Idempotency key stored at `/app/data/.wallet_idempotency_key` — prevents duplicate wallet creation on rapid restarts (CDP returns same wallet within 24h for same key)
-- Three modes: load existing JSON, import from `MNEMONIC_PHRASE` env var, or create new MPC wallet via CDP API
-- On 429 / rate-limit errors, process waits 10 minutes before exiting (slows Docker restart loops)
+- Uses the CDP v2 API (`CdpEvmWalletProvider`) — wallet is deterministically derived from `CDP_WALLET_SECRET`
+- No local wallet file needed — the same secret always produces the same address
+- On each boot, the wallet address is logged to stderr and the activity log
 
 ### Logging
 - Activity written as JSONL to `/app/data/activity.log`
@@ -43,7 +42,7 @@ src/
 
 ## Data Persistence
 
-`/app/data` is mounted as a Docker named volume (`wallet_data`):
+`/app/data` is mounted as a Docker named volume (`wallet_data`) — used for the activity log only (wallet state lives in CDP, not locally):
 
 ```yaml
 volumes:
@@ -61,13 +60,13 @@ volumes:
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `CDP_API_KEY_NAME` | Yes | — | Coinbase Developer Platform API key name |
-| `CDP_API_KEY_PRIVATE_KEY` | Yes | — | CDP API private key (supports `\n` escape sequences) |
+| `CDP_API_KEY_ID` | Yes | — | CDP v2 API key ID (from portal.cdp.coinbase.com → API Keys) |
+| `CDP_API_KEY_SECRET` | Yes | — | CDP v2 API key secret |
+| `CDP_WALLET_SECRET` | Yes | — | CDP wallet secret — determines the wallet address |
 | `NETWORK_ID` | No | `base-sepolia` | Blockchain network ID |
 | `WEB_PORT` | No | `3002` | Port for the web UI |
 | `LOG_RETENTION_DAYS` | No | `30` | Days to retain activity log entries |
-| `MNEMONIC_PHRASE` | No | — | BIP-39 mnemonic for deterministic wallet import |
-| `WALLET_DATA_PATH` | No | (named volume) | Host path for bind-mount wallet storage |
+| `WALLET_DATA_PATH` | No | (named volume) | Host path for bind-mount log storage |
 
 ---
 
@@ -96,4 +95,3 @@ docker build -t coinbase-mcp-server .
 - Multi-stage Dockerfile: builder stage compiles TS, runtime stage installs prod-only deps
 - Process runs as non-root `node` user (UID 1000) inside container
 - MCP requires `stdin_open: true` and `tty: true` in docker-compose for stdio transport
-- The Coinbase SDK's `apiClients.wallet.createWallet` is monkey-patched at boot to inject the `Idempotency-Key` header
