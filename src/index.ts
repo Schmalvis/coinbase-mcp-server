@@ -104,7 +104,21 @@ async function main(): Promise<void> {
   console.error("[boot]", toolsMsg);
   logBoot(toolsMsg, { toolCount: tools.length, network: networkId });
 
-  // 5. Build MCP server ──────────────────────────────────────────────────────
+  // 5. Wrap toolHandler with logging ────────────────────────────────────────
+  const loggingToolHandler = async (name: string, args: Record<string, unknown>) => {
+    logToolCall(name, args);
+    const start = Date.now();
+    try {
+      const result = await toolHandler(name, args);
+      logToolResult(name, true, Date.now() - start);
+      return result;
+    } catch (err: unknown) {
+      logToolResult(name, false, Date.now() - start);
+      throw err;
+    }
+  };
+
+  // 6. Build stdio MCP server ────────────────────────────────────────────────
   const server = new Server(
     { name: "coinbase-agentkit-mcp", version: "1.0.0" },
     { capabilities: { tools: {} } }
@@ -114,26 +128,15 @@ async function main(): Promise<void> {
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
-    const safeArgs = (args ?? {}) as Record<string, unknown>;
-
-    logToolCall(name, safeArgs);
-    const start = Date.now();
-    try {
-      const result = await toolHandler(name, safeArgs);
-      logToolResult(name, true, Date.now() - start);
-      return result;
-    } catch (err: unknown) {
-      logToolResult(name, false, Date.now() - start);
-      throw err; // let MCP SDK format the error response
-    }
+    return loggingToolHandler(name, (args ?? {}) as Record<string, unknown>);
   });
 
-  // 6. Connect stdio transport ───────────────────────────────────────────────
+  // 7. Connect stdio transport ───────────────────────────────────────────────
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
-  // 7. Start web UI alongside stdio ─────────────────────────────────────────
-  startWebServer(tools);
+  // 8. Start web UI + HTTP MCP transport ────────────────────────────────────
+  startWebServer(tools, loggingToolHandler);
 
   writeLog({
     ts: new Date().toISOString(),
@@ -143,7 +146,7 @@ async function main(): Promise<void> {
     data: { toolCount: tools.length, network: networkId, address },
   });
 
-  console.error("[mcp] Server running on stdio – ready for connections.");
+  console.error("[mcp] Stdio transport ready.");
 }
 
 main().catch(async (err: unknown) => {
