@@ -55,6 +55,13 @@ All tool names are prefixed with their provider class, e.g. `ERC20ActionProvider
 - Log retention configurable via `LOG_RETENTION_DAYS` env var (default: 30)
 - `trimOldLogs()` called on every boot to purge expired entries
 
+### Transports
+Two MCP transports run simultaneously on the same process:
+- **stdio** — for local clients (Claude Desktop via `docker exec`)
+- **HTTP (Streamable HTTP)** — at `http://<host>:3002/mcp`, for remote LAN clients
+
+Both transports share the same tool handlers and activity log.
+
 ### Web UI
 - Available at `http://localhost:3002` (configurable via `WEB_PORT`)
 - Polls `/api/tools` and `/api/logs` every 5 seconds

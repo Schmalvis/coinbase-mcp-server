@@ -1,23 +1,104 @@
 import * as http from "http";
-import { readLogs } from "./logger.js";
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+} from "@modelcontextprotocol/sdk/types.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import { logToolCall, logToolResult, readLogs } from "./logger.js";
+
+type ToolHandler = (name: string, args: Record<string, unknown>) => Promise<unknown>;
+
+// ── MCP server factory (one per HTTP request in stateless mode) ───────────────
+
+function buildMcpServer(tools: Tool[], toolHandler: ToolHandler): Server {
+  const server = new Server(
+    { name: "coinbase-agentkit-mcp", version: "1.0.0" },
+    { capabilities: { tools: {} } }
+  );
+
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
+
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const { name, arguments: args } = request.params;
+    const safeArgs = (args ?? {}) as Record<string, unknown>;
+
+    logToolCall(name, safeArgs);
+    const start = Date.now();
+    try {
+      const result = await toolHandler(name, safeArgs);
+      logToolResult(name, true, Date.now() - start);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return result as any;
+    } catch (err: unknown) {
+      logToolResult(name, false, Date.now() - start);
+      throw err;
+    }
+  });
+
+  return server;
+}
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-export function startWebServer(tools: Tool[]): http.Server {
+export function startWebServer(tools: Tool[], toolHandler: ToolHandler): http.Server {
   const port = parseInt(process.env.WEB_PORT ?? "3002", 10);
 
-  const server = http.createServer((req, res) => {
+  const server = http.createServer(async (req, res) => {
+    // CORS — allow any origin (LAN use)
     res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "GET");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Accept, Mcp-Session-Id");
 
+    if (req.method === "OPTIONS") {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
+    const url = new URL(req.url ?? "/", `http://localhost:${port}`);
+
+    // ── MCP Streamable HTTP transport ────────────────────────────────────────
+    if (url.pathname === "/mcp") {
+      try {
+        const transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: undefined, // stateless — no session tracking needed
+        });
+
+        const mcpServer = buildMcpServer(tools, toolHandler);
+        await mcpServer.connect(transport);
+
+        // For POST: read and parse the JSON body before handing off
+        if (req.method === "POST") {
+          const raw = await new Promise<string>((resolve, reject) => {
+            let body = "";
+            req.on("data", (chunk: Buffer) => { body += chunk.toString(); });
+            req.on("end", () => resolve(body));
+            req.on("error", reject);
+          });
+          let parsedBody: unknown;
+          try { parsedBody = JSON.parse(raw); } catch { /* let transport reject */ }
+          await transport.handleRequest(req, res, parsedBody);
+        } else {
+          await transport.handleRequest(req, res);
+        }
+      } catch (err) {
+        console.error("[mcp/http] Error handling request:", err);
+        if (!res.headersSent) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Internal server error" }));
+        }
+      }
+      return;
+    }
+
+    // ── Web UI routes ────────────────────────────────────────────────────────
     if (req.method !== "GET") {
       res.writeHead(405, { "Content-Type": "text/plain" });
       res.end("Method Not Allowed");
       return;
     }
-
-    const url = new URL(req.url ?? "/", `http://localhost:${port}`);
 
     switch (url.pathname) {
       case "/":
@@ -71,6 +152,7 @@ export function startWebServer(tools: Tool[]): http.Server {
 
   server.listen(port, () => {
     console.error(`[web] UI available at http://localhost:${port}`);
+    console.error(`[mcp] HTTP transport available at http://localhost:${port}/mcp`);
   });
 
   return server;
