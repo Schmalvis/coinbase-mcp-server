@@ -169,6 +169,7 @@ function buildHtml(): string {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Coinbase AgentKit MCP</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230052FF'/%3E%3Ctext x='16' y='13' font-family='system-ui,sans-serif' font-size='7.5' font-weight='700' fill='white' text-anchor='middle' letter-spacing='0.3'%3EAGENT%3C/text%3E%3Ctext x='16' y='23' font-family='system-ui,sans-serif' font-size='9' font-weight='800' fill='white' text-anchor='middle' letter-spacing='1'%3EMCP%3C/text%3E%3C/svg%3E">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
