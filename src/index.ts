@@ -100,9 +100,6 @@ async function initNetwork(
 // ── Boot ─────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-  // 0. Trim log entries older than retention window
-  trimOldLogs();
-
   // 1. Validate required environment variables
   const apiKeyId = process.env.CDP_API_KEY_ID;
   const apiKeySecret = process.env.CDP_API_KEY_SECRET;
@@ -153,6 +150,9 @@ async function main(): Promise<void> {
       toolCount: tools.length, network: networkId,
     });
   }
+
+  // 0. Trim log entries older than retention window (deferred: all boot writes are done)
+  trimOldLogs();
 
   // 3. Build final tool list — inject `network` param when multiple networks ──
   const multiNetwork = networks.length > 1;
