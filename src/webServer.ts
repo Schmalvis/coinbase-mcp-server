@@ -51,12 +51,13 @@ export function startWebServer(tools: Tool[], toolHandler: ToolHandler): http.Se
     // ── MCP Streamable HTTP transport ────────────────────────────────────────
     if (url.pathname === "/mcp") {
       const MAX_BODY_BYTES = 1 * 1024 * 1024; // 1 MB
+      let mcpServer: Server | undefined;
       try {
         const transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: undefined, // stateless — no session tracking needed
         });
 
-        const mcpServer = buildMcpServer(tools, toolHandler);
+        mcpServer = buildMcpServer(tools, toolHandler);
         await mcpServer.connect(transport);
 
         // For POST: read and parse the JSON body before handing off
@@ -90,6 +91,8 @@ export function startWebServer(tools: Tool[], toolHandler: ToolHandler): http.Se
           res.writeHead(statusCode, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ error: message }));
         }
+      } finally {
+        await mcpServer?.close().catch(() => {});
       }
       return;
     }
