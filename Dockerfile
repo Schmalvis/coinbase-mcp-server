@@ -34,8 +34,8 @@ RUN --mount=type=cache,target=/root/.npm \
 COPY --from=builder /app/dist ./dist
 
 # ── Security: run as non-root ──────────────────────────────────────────────────
-# Web UI port (default 3000, configurable via WEB_PORT env var)
-EXPOSE 3000
+# Web UI port (default 3002, configurable via WEB_PORT env var)
+EXPOSE 3002
 
 USER node
 

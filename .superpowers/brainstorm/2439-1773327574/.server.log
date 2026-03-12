@@ -1,0 +1,2 @@
+{"type":"server-started","port":59088,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:59088","screen_dir":"c:/ws/coinbase-mcp-server/.superpowers/brainstorm/2439-1773327574"}
+{"type":"server-stopped","reason":"owner process exited"}
