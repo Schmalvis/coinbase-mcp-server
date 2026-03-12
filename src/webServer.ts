@@ -482,7 +482,7 @@ function buildHtml(): string {
       <div class="panel-head">
         <span class="panel-head-label">Activity Log</span>
         <div class="log-controls">
-          <button id="btn-pause" class="active">Pause</button>
+          <button id="btn-pause">Pause</button>
           <button id="btn-clear">Clear view</button>
         </div>
       </div>
@@ -554,7 +554,7 @@ function buildHtml(): string {
     document.getElementById('btn-pause').addEventListener('click', function () {
       paused = !paused;
       this.textContent = paused ? 'Resume' : 'Pause';
-      this.classList.toggle('active', !paused);
+      this.classList.toggle('active', paused);
     });
     document.getElementById('btn-clear').addEventListener('click', function () {
       document.getElementById('log-list').innerHTML =
