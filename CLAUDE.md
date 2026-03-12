@@ -5,7 +5,7 @@
 An MCP (Model Context Protocol) server that exposes Coinbase AgentKit tools to LLM clients. It runs over stdio transport and includes a companion web UI for observability.
 
 **Stack:** TypeScript, Node.js 20, `@coinbase/agentkit`, `@modelcontextprotocol/sdk`
-**Transport:** MCP over stdio (stdin/stdout)
+**Transports:** MCP over stdio (stdin/stdout) + Streamable HTTP (`/mcp`)
 **Container:** Docker via `docker-compose.yml`, image `ghcr.io/schmalvis/coinbase-mcp-server:latest`
 
 ---
@@ -21,7 +21,7 @@ src/
 
 ---
 
-## Action Providers & Tools (38 total)
+## Action Providers & Tools
 
 | Provider | Tools |
 |---|---|
@@ -34,12 +34,14 @@ src/
 | `basenameActionProvider` | register_basename |
 | `compoundActionProvider` | supply, withdraw, borrow, repay, get_portfolio |
 | `morphoActionProvider` | deposit, withdraw |
-| `superfluidActionProvider` | create/update/delete stream, create/update pool, query_streams, wrap token, create super token |
+| `superfluidStreamActionProvider` | create_stream, update_stream, delete_stream |
+| `superfluidPoolActionProvider` | create_pool, update_pool |
+| `superfluidQueryActionProvider` | query_streams |
+| `superfluidWrapperActionProvider` | wrap_token |
+| `superfluidSuperTokenCreatorActionProvider` | create_super_token |
 | `defillamaActionProvider` | find_protocol, get_protocol, get_token_prices |
 | `pythActionProvider` | fetch_price_feed, fetch_price |
 | `ensoActionProvider` | route _(mainnet only — unavailable on base-sepolia)_ |
-
-All tool names are prefixed with their provider class, e.g. `ERC20ActionProvider_get_balance`.
 
 ---
 
@@ -55,10 +57,15 @@ All tool names are prefixed with their provider class, e.g. `ERC20ActionProvider
 - Log retention configurable via `LOG_RETENTION_DAYS` env var (default: 30)
 - `trimOldLogs()` called on every boot to purge expired entries
 
+### Multi-Network Support
+Set `NETWORK_ID` to a comma-separated list to enable multiple networks (e.g. `base-sepolia,base-mainnet`).
+
+In multi-network mode each tool gains a `network` enum parameter — the calling LLM specifies which network to use per request. The default is the first network in the list. Single-network deployments have no `network` parameter.
+
 ### Transports
 Two MCP transports run simultaneously on the same process:
 - **stdio** — for local clients (Claude Desktop via `docker exec`)
-- **HTTP (Streamable HTTP)** — at `http://<host>:3002/mcp`, for remote LAN clients
+- **HTTP (Streamable HTTP, stateless)** — at `http://<host>:3002/mcp`, for remote LAN clients
 
 Both transports share the same tool handlers and activity log.
 
@@ -92,7 +99,7 @@ volumes:
 | `CDP_API_KEY_ID` | Yes | — | CDP v2 API key ID (from portal.cdp.coinbase.com → API Keys) |
 | `CDP_API_KEY_SECRET` | Yes | — | CDP v2 API key secret |
 | `CDP_WALLET_SECRET` | Yes | — | CDP wallet secret — determines the wallet address |
-| `NETWORK_ID` | No | `base-sepolia` | Blockchain network ID |
+| `NETWORK_ID` | No | `base-sepolia` | Network ID, or comma-separated list e.g. `base-sepolia,base-mainnet` |
 | `WEB_PORT` | No | `3002` | Port for the web UI |
 | `LOG_RETENTION_DAYS` | No | `30` | Days to retain activity log entries |
 | `WALLET_DATA_PATH` | No | (named volume) | Host path for bind-mount log storage |

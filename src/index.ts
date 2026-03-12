@@ -26,6 +26,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import "dotenv/config";
 import {
   logBoot,
@@ -37,6 +38,60 @@ import {
 } from "./logger.js";
 import { startWebServer } from "./webServer.js";
 
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type RawToolHandler = (name: string, args: Record<string, unknown>) => Promise<unknown>;
+
+// ── Action provider factory ───────────────────────────────────────────────────
+
+function buildActionProviders() {
+  return [
+    walletActionProvider(),
+    cdpApiActionProvider(),
+    cdpEvmWalletActionProvider(),
+    erc20ActionProvider(),
+    erc721ActionProvider(),
+    wethActionProvider(),
+    basenameActionProvider(),
+    compoundActionProvider(),
+    ensoActionProvider(),
+    morphoActionProvider(),
+    superfluidStreamActionProvider(),
+    superfluidPoolActionProvider(),
+    superfluidQueryActionProvider(),
+    superfluidWrapperActionProvider(),
+    superfluidSuperTokenCreatorActionProvider(),
+    defillamaActionProvider(),
+    pythActionProvider(),
+  ];
+}
+
+// ── Per-network initialisation ────────────────────────────────────────────────
+
+async function initNetwork(
+  networkId: string,
+  apiKeyId: string,
+  apiKeySecret: string,
+  walletSecret: string,
+): Promise<{ tools: Tool[]; toolHandler: RawToolHandler; address: string }> {
+  const walletProvider = await CdpEvmWalletProvider.configureWithWallet({
+    apiKeyId,
+    apiKeySecret,
+    walletSecret,
+    networkId,
+  });
+
+  const address = await walletProvider.getAddress();
+
+  const agentKit = await AgentKit.from({
+    walletProvider,
+    actionProviders: buildActionProviders(),
+  });
+
+  const { tools, toolHandler } = await getMcpTools(agentKit);
+  return { tools, toolHandler, address };
+}
+
 // ── Boot ─────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -47,7 +102,6 @@ async function main(): Promise<void> {
   const apiKeyId = process.env.CDP_API_KEY_ID;
   const apiKeySecret = process.env.CDP_API_KEY_SECRET;
   const walletSecret = process.env.CDP_WALLET_SECRET;
-  const networkId = process.env.NETWORK_ID ?? "base-sepolia";
 
   if (!apiKeyId || !apiKeySecret || !walletSecret) {
     throw new Error(
@@ -55,61 +109,102 @@ async function main(): Promise<void> {
     );
   }
 
-  // 2. Configure v2 wallet provider ─────────────────────────────────────────
-  // The wallet is deterministically derived from CDP_WALLET_SECRET — no local
-  // wallet file needed. The same secret always produces the same address.
-  const bootMsg = `Configuring CdpEvmWalletProvider on ${networkId}`;
-  console.error("[boot]", bootMsg);
-  logBoot(bootMsg);
+  // NETWORK_ID accepts a comma-separated list, e.g. "base-sepolia,base-mainnet"
+  const networks = (process.env.NETWORK_ID ?? "base-sepolia")
+    .split(",")
+    .map((n) => n.trim())
+    .filter(Boolean);
 
-  const walletProvider = await CdpEvmWalletProvider.configureWithWallet({
-    apiKeyId,
-    apiKeySecret,
-    walletSecret,
-    networkId,
-  });
+  // 2. Initialise each network ───────────────────────────────────────────────
+  // toolRegistry: toolName → { schema, handlers: Map<networkId, handler> }
+  interface NetworkedTool {
+    schema: Tool;
+    handlers: Map<string, RawToolHandler>;
+  }
+  const toolRegistry = new Map<string, NetworkedTool>();
 
-  const address = await walletProvider.getAddress();
-  const addrMsg = `Wallet address: ${address}`;
-  console.error("[boot]", addrMsg);
-  logBoot(addrMsg, { address, network: networkId });
+  for (const networkId of networks) {
+    const bootMsg = `Configuring CdpEvmWalletProvider on ${networkId}`;
+    console.error("[boot]", bootMsg);
+    logBoot(bootMsg);
 
-  // 3. Initialise AgentKit ───────────────────────────────────────────────────
-  const agentKit = await AgentKit.from({
-    walletProvider,
-    actionProviders: [
-      walletActionProvider(),
-      cdpApiActionProvider(),
-      cdpEvmWalletActionProvider(),
-      erc20ActionProvider(),
-      erc721ActionProvider(),
-      wethActionProvider(),
-      basenameActionProvider(),
-      compoundActionProvider(),
-      ensoActionProvider(),
-      morphoActionProvider(),
-      superfluidStreamActionProvider(),
-      superfluidPoolActionProvider(),
-      superfluidQueryActionProvider(),
-      superfluidWrapperActionProvider(),
-      superfluidSuperTokenCreatorActionProvider(),
-      defillamaActionProvider(),
-      pythActionProvider(),
-    ],
-  });
+    const { tools, toolHandler, address } = await initNetwork(
+      networkId, apiKeyId, apiKeySecret, walletSecret,
+    );
 
-  // 4. Obtain MCP tool definitions + unified handler from AgentKit ──────────
-  const { tools, toolHandler } = await getMcpTools(agentKit);
-  const toolsMsg = `Loaded ${tools.length} AgentKit tool(s).`;
-  console.error("[boot]", toolsMsg);
-  logBoot(toolsMsg, { toolCount: tools.length, network: networkId });
+    logBoot(`Wallet address (${networkId}): ${address}`, { address, network: networkId });
+    console.error(`[boot] Wallet address (${networkId}): ${address}`);
 
-  // 5. Wrap toolHandler with logging ────────────────────────────────────────
+    for (const tool of tools) {
+      if (!toolRegistry.has(tool.name)) {
+        toolRegistry.set(tool.name, { schema: tool, handlers: new Map() });
+      }
+      const originalName = tool.name;
+      toolRegistry.get(tool.name)!.handlers.set(
+        networkId,
+        (_, args) => toolHandler(originalName, args),
+      );
+    }
+
+    logBoot(`Loaded ${tools.length} tool(s) for ${networkId}.`, {
+      toolCount: tools.length, network: networkId,
+    });
+  }
+
+  // 3. Build final tool list — inject `network` param when multiple networks ──
+  const multiNetwork = networks.length > 1;
+  const allTools: Tool[] = [];
+
+  for (const [, entry] of toolRegistry) {
+    if (!multiNetwork) {
+      allTools.push(entry.schema);
+    } else {
+      const supportedNetworks = [...entry.handlers.keys()];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const existingProps = (entry.schema.inputSchema as any).properties ?? {};
+      allTools.push({
+        ...entry.schema,
+        inputSchema: {
+          ...entry.schema.inputSchema,
+          properties: {
+            network: {
+              type: "string",
+              enum: supportedNetworks,
+              default: supportedNetworks[0],
+              description: `Blockchain network to execute on. Available: ${supportedNetworks.join(", ")}`,
+            },
+            ...existingProps,
+          },
+        },
+      });
+    }
+  }
+
+  console.error(`[boot] ${allTools.length} unique tool(s) across ${networks.length} network(s).`);
+
+  // 4. Wrap with routing + logging ───────────────────────────────────────────
   const loggingToolHandler = async (name: string, args: Record<string, unknown>) => {
-    logToolCall(name, args);
+    const entry = toolRegistry.get(name);
+    if (!entry) throw new Error(`Unknown tool: ${name}`);
+
+    // Extract and strip the `network` param (only present in multi-network mode)
+    let networkId = networks[0];
+    let toolArgs = args;
+    if (multiNetwork) {
+      const { network, ...rest } = args;
+      networkId = (typeof network === "string" && network) ? network : networks[0];
+      toolArgs = rest;
+    }
+
+    const handler = entry.handlers.get(networkId);
+    if (!handler) {
+      throw new Error(`Tool "${name}" is not available on ${networkId}`);
+    }
+
+    logToolCall(name, { ...toolArgs, network: networkId });
     const start = Date.now();
     try {
-      const result = await toolHandler(name, args);
+      const result = await handler(name, toolArgs);
       logToolResult(name, true, Date.now() - start);
       return result;
     } catch (err: unknown) {
@@ -118,32 +213,33 @@ async function main(): Promise<void> {
     }
   };
 
-  // 6. Build stdio MCP server ────────────────────────────────────────────────
+  // 4. Build stdio MCP server ────────────────────────────────────────────────
   const server = new Server(
     { name: "coinbase-agentkit-mcp", version: "1.0.0" },
     { capabilities: { tools: {} } }
   );
 
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: allTools }));
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
-    return loggingToolHandler(name, (args ?? {}) as Record<string, unknown>);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return loggingToolHandler(name, (args ?? {}) as Record<string, unknown>) as any;
   });
 
-  // 7. Connect stdio transport ───────────────────────────────────────────────
+  // 5. Connect stdio transport ───────────────────────────────────────────────
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
-  // 8. Start web UI + HTTP MCP transport ────────────────────────────────────
-  startWebServer(tools, loggingToolHandler);
+  // 6. Start web UI + HTTP MCP transport ────────────────────────────────────
+  startWebServer(allTools, loggingToolHandler);
 
   writeLog({
     ts: new Date().toISOString(),
     level: "info",
     event: "server_ready",
-    message: `MCP server ready. ${tools.length} tool(s) available on ${networkId}.`,
-    data: { toolCount: tools.length, network: networkId, address },
+    message: `MCP server ready. ${allTools.length} tool(s) across ${networks.join(", ")}.`,
+    data: { toolCount: allTools.length, networks },
   });
 
   console.error("[mcp] Stdio transport ready.");

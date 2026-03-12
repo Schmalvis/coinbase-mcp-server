@@ -1,6 +1,6 @@
 # Deployment
 
-A `linux/arm64` Docker image is automatically built and pushed to the GitHub Container Registry on every push to `main`.
+A multi-arch Docker image is automatically built and pushed to the GitHub Container Registry on every push to `main`.
 
 ```
 git push → GitHub Actions → ghcr.io/schmalvis/coinbase-mcp-server:latest
@@ -12,26 +12,27 @@ git push → GitHub Actions → ghcr.io/schmalvis/coinbase-mcp-server:latest
 |-----|-------------|
 | `latest` | Most recent build from `main` |
 | `v1.2.3` | Pinned to a specific release |
-| `1.2` | Latest patch within a minor version |
 | `sha-a1b2c3d` | Exact build by git commit |
 
-## Docker Compose
+## Docker Compose (recommended)
 
 ```bash
+cp .env.example .env      # fill in CDP credentials
 docker compose up -d      # start in background
 docker compose logs -f    # follow logs
-docker compose down       # stop (wallet volume is preserved)
-docker compose down -v    # ⚠️ stop AND delete wallet volume — irreversible
+docker compose down       # stop (log volume preserved)
+docker compose down -v    # ⚠️ stop AND delete log volume — irreversible
 ```
 
-`stack.env` is loaded automatically by Compose. See [configuration.md](configuration.md) for values.
+See [configuration.md](configuration.md) for all environment variables.
 
 ## Docker Run (manual)
 
 ```bash
 docker run -i \
-  -e CDP_API_KEY_NAME=your-key-id \
-  -e CDP_API_KEY_PRIVATE_KEY=your-base64-key \
+  -e CDP_API_KEY_ID=your-key-id \
+  -e CDP_API_KEY_SECRET=your-api-secret \
+  -e CDP_WALLET_SECRET=your-wallet-secret \
   -e NETWORK_ID=base-sepolia \
   -p 3002:3002 \
   -v coinbase_wallet_data:/app/data \
@@ -67,10 +68,9 @@ docker run -i \
   run: curl -X POST "${{ secrets.PORTAINER_WEBHOOK_URL }}"
 ```
 
-### Troubleshooting Portainer builds
+### Troubleshooting
 
-If you see `compose build operation failed: The command '/bin/sh -c npm ci' returned a non-zero code: 1`, Portainer is trying to build the image locally instead of pulling it. The `docker-compose.yml` no longer contains a `build:` directive — it pulls from ghcr.io directly. Check that:
-
-- The GitHub Actions workflow has completed at least once and pushed the image
-- Portainer has credentials to access ghcr.io (or the package is public)
+If Portainer fails with `compose build operation failed`, it is trying to build locally instead of pulling. Ensure:
+- The GitHub Actions workflow has completed and pushed the image
+- Portainer has credentials to access `ghcr.io` (or the package is public)
 - The image tag `latest` exists in the registry

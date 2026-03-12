@@ -8,12 +8,12 @@ When the server is running, open:
 http://localhost:3002
 ```
 
-Replace `localhost` with your server's IP when accessing a remote deployment (e.g. Portainer host).
+Replace `localhost` with your server's IP when accessing a remote deployment.
 
 ## Panels
 
 **Available Tools** (left panel)
-- Lists all 12 AgentKit tools with name and description
+- Lists all AgentKit tools with name and description
 - Click any card to expand its full JSON input schema
 
 **Activity Log** (right panel)
@@ -37,10 +37,10 @@ Replace `localhost` with your server's IP when accessing a remote deployment (e.
 
 Activity is written to `/app/data/activity.log` inside the Docker volume — it survives container restarts and redeployments.
 
-The log is in JSONL format (one JSON object per line):
+The log is JSONL format (one JSON object per line):
 
 ```json
-{"ts":"2026-03-01T14:23:01.000Z","level":"info","event":"tool_call","message":"Tool called: get_balance","data":{"tool":"get_balance","args":{"asset_id":"ETH"}}}
+{"ts":"2026-03-01T14:23:01.000Z","level":"info","event":"tool_call","message":"Tool called: get_balance","data":{"tool":"get_balance","args":{"tokenAddress":"0x..."},"network":"base-sepolia"}}
 ```
 
 ## Configuration
@@ -49,4 +49,3 @@ The log is in JSONL format (one JSON object per line):
 |----------|---------|-------------|
 | `WEB_PORT` | `3002` | Port the UI listens on |
 | `LOG_RETENTION_DAYS` | `30` | Days to keep log entries — older entries are purged on startup |
-| `ACTIVITY_LOG_FILE` | `/app/data/activity.log` | Override log path (useful for local development) |
