@@ -6,7 +6,7 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { logToolCall, logToolResult, readLogs } from "./logger.js";
+import { readLogs } from "./logger.js";
 
 type ToolHandler = (name: string, args: Record<string, unknown>) => Promise<unknown>;
 
@@ -22,19 +22,8 @@ function buildMcpServer(tools: Tool[], toolHandler: ToolHandler): Server {
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
-    const safeArgs = (args ?? {}) as Record<string, unknown>;
-
-    logToolCall(name, safeArgs);
-    const start = Date.now();
-    try {
-      const result = await toolHandler(name, safeArgs);
-      logToolResult(name, true, Date.now() - start);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return result as any;
-    } catch (err: unknown) {
-      logToolResult(name, false, Date.now() - start);
-      throw err;
-    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return toolHandler(name, (args ?? {}) as Record<string, unknown>) as any;
   });
 
   return server;
@@ -61,6 +50,7 @@ export function startWebServer(tools: Tool[], toolHandler: ToolHandler): http.Se
 
     // ── MCP Streamable HTTP transport ────────────────────────────────────────
     if (url.pathname === "/mcp") {
+      const MAX_BODY_BYTES = 1 * 1024 * 1024; // 1 MB
       try {
         const transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: undefined, // stateless — no session tracking needed
@@ -71,9 +61,18 @@ export function startWebServer(tools: Tool[], toolHandler: ToolHandler): http.Se
 
         // For POST: read and parse the JSON body before handing off
         if (req.method === "POST") {
+          let totalBytes = 0;
           const raw = await new Promise<string>((resolve, reject) => {
             let body = "";
-            req.on("data", (chunk: Buffer) => { body += chunk.toString(); });
+            req.on("data", (chunk: Buffer) => {
+              totalBytes += chunk.length;
+              if (totalBytes > MAX_BODY_BYTES) {
+                req.resume(); // drain remaining data so the socket closes cleanly
+                reject(Object.assign(new Error("Request body too large"), { statusCode: 413 }));
+                return;
+              }
+              body += chunk.toString();
+            });
             req.on("end", () => resolve(body));
             req.on("error", reject);
           });
@@ -84,10 +83,12 @@ export function startWebServer(tools: Tool[], toolHandler: ToolHandler): http.Se
           await transport.handleRequest(req, res);
         }
       } catch (err) {
+        const statusCode = (err as { statusCode?: number }).statusCode ?? 500;
+        const message = statusCode === 413 ? "Payload too large" : "Internal server error";
         console.error("[mcp/http] Error handling request:", err);
         if (!res.headersSent) {
-          res.writeHead(500, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "Internal server error" }));
+          res.writeHead(statusCode, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: message }));
         }
       }
       return;
