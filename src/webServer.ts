@@ -10,6 +10,12 @@ import { readLogs } from "./logger.js";
 
 type ToolHandler = (name: string, args: Record<string, unknown>) => Promise<unknown>;
 
+interface ServerStatus {
+  address: string;
+  networks: string[];
+  startedAt: Date;
+}
+
 // ── MCP server factory (one per HTTP request in stateless mode) ───────────────
 
 function buildMcpServer(tools: Tool[], toolHandler: ToolHandler): Server {
@@ -31,7 +37,7 @@ function buildMcpServer(tools: Tool[], toolHandler: ToolHandler): Server {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-export function startWebServer(tools: Tool[], toolHandler: ToolHandler): http.Server {
+export function startWebServer(tools: Tool[], toolHandler: ToolHandler, status: ServerStatus): http.Server {
   const port = parseInt(process.env.WEB_PORT ?? "3002", 10);
 
   const server = http.createServer(async (req, res) => {
@@ -139,6 +145,19 @@ export function startWebServer(tools: Tool[], toolHandler: ToolHandler): http.Se
         res.end(JSON.stringify(readLogs(limit)));
         break;
       }
+
+      case "/api/status":
+        res.writeHead(200, {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+        });
+        res.end(JSON.stringify({
+          address: status.address,
+          networks: status.networks,
+          toolCount: tools.length,
+          uptimeMs: Date.now() - status.startedAt.getTime(),
+        }));
+        break;
 
       default:
         res.writeHead(404, { "Content-Type": "text/plain" });
@@ -277,6 +296,11 @@ function buildHtml(): string {
       background: var(--green);
       animation: pulse 2.5s infinite;
     }
+    .status-pill.degraded {
+      background: var(--amber-lt);
+      color: var(--amber);
+    }
+    .status-pill.degraded .dot { background: var(--amber); animation: none; }
     @keyframes pulse {
       0%, 100% { opacity: 1; }
       50%       { opacity: 0.3; }
@@ -472,9 +496,13 @@ function buildHtml(): string {
     <h1>AgentKit MCP Server</h1>
     <div class="header-divider"></div>
     <span class="header-badge" id="tool-count">–</span>
+    <span class="header-badge" id="network-badge" style="display:none">–</span>
+    <span class="header-badge" id="address-badge"
+      style="display:none;font-family:var(--mono);cursor:pointer"
+      title="Click to copy wallet address">–</span>
 
     <div class="header-right">
-      <div class="status-pill"><span class="dot"></span>Online</div>
+      <div class="status-pill" id="status-pill"><span class="dot"></span>Online</div>
       <span id="header-meta">–</span>
     </div>
   </header>
@@ -513,9 +541,38 @@ function buildHtml(): string {
     // ── Tools ──────────────────────────────────────────────────────────────────
     async function loadTools() {
       try {
-        const tools = await fetch('/api/tools').then(r => r.json());
+        const [tools, status] = await Promise.all([
+          fetch('/api/tools').then(r => r.json()),
+          fetch('/api/status').then(r => r.json()).catch(function() { return null; }),
+        ]);
         document.getElementById('tool-count').textContent = tools.length + ' tools';
         document.getElementById('header-meta').textContent = new Date().toLocaleTimeString();
+
+        var netBadge = document.getElementById('network-badge');
+        var addrBadge = document.getElementById('address-badge');
+        var pill = document.getElementById('status-pill');
+        if (status) {
+          netBadge.textContent = status.networks.join(', ');
+          netBadge.style.display = '';
+          var addr = status.address;
+          var short = addr.slice(0, 6) + '\u2026' + addr.slice(-4);
+          addrBadge.textContent = short;
+          addrBadge.title = addr + ' (click to copy)';
+          addrBadge.style.display = '';
+          addrBadge.onclick = function() {
+            navigator.clipboard.writeText(addr).then(function() {
+              addrBadge.textContent = 'Copied!';
+              setTimeout(function() { addrBadge.textContent = short; }, 1500);
+            });
+          };
+          pill.className = 'status-pill';
+          pill.innerHTML = '<span class="dot"></span>Online';
+        } else {
+          netBadge.style.display = 'none';
+          addrBadge.style.display = 'none';
+          pill.className = 'status-pill degraded';
+          pill.innerHTML = '<span class="dot"></span>Degraded';
+        }
 
         const el = document.getElementById('tools-list');
         if (!tools.length) { el.innerHTML = '<div class="empty">No tools loaded.</div>'; return; }

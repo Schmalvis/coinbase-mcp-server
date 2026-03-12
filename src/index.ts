@@ -124,6 +124,7 @@ async function main(): Promise<void> {
   // toolRegistry: toolName → { schema, handlers: Map<networkId, handler> }
   const toolRegistry = new Map<string, NetworkedTool>();
 
+  let primaryAddress = "";
   for (const networkId of networks) {
     const bootMsg = `Configuring CdpEvmWalletProvider on ${networkId}`;
     console.error("[boot]", bootMsg);
@@ -132,6 +133,7 @@ async function main(): Promise<void> {
     const { tools, toolHandler, address } = await initNetwork(
       networkId, apiKeyId, apiKeySecret, walletSecret,
     );
+    if (!primaryAddress) primaryAddress = address;
 
     logBoot(`Wallet address (${networkId}): ${address}`, { address, network: networkId });
     console.error(`[boot] Wallet address (${networkId}): ${address}`);
@@ -233,7 +235,11 @@ async function main(): Promise<void> {
   await server.connect(transport);
 
   // 6. Start web UI + HTTP MCP transport ────────────────────────────────────
-  startWebServer(allTools, loggingToolHandler);
+  startWebServer(allTools, loggingToolHandler, {
+    address: primaryAddress,
+    networks,
+    startedAt: new Date(),
+  });
 
   writeLog({
     ts: new Date().toISOString(),
