@@ -314,6 +314,20 @@ function buildHtml(): string {
       color: var(--muted);
     }
 
+    .tool-search {
+      font-size: 12px;
+      padding: 4px 8px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg);
+      color: var(--text);
+      outline: none;
+      width: 140px;
+      transition: border-color 0.12s;
+    }
+    .tool-search:focus { border-color: var(--accent); }
+    .tool-search::placeholder { color: var(--muted); }
+
     .panel-body {
       flex: 1;
       overflow-y: auto;
@@ -470,7 +484,7 @@ function buildHtml(): string {
     <div class="panel">
       <div class="panel-head">
         <span class="panel-head-label">Available Tools</span>
-        <span class="panel-head-meta">Click to expand schema</span>
+        <input id="tool-search" class="tool-search" type="search" placeholder="Filter tools…" autocomplete="off">
       </div>
       <div class="panel-body" id="tools-list">
         <div class="empty">Loading tools…</div>
@@ -560,6 +574,14 @@ function buildHtml(): string {
       document.getElementById('log-list').innerHTML =
         '<div class="empty">View cleared — log is still persisted on disk.</div>';
       lastCount = -1;
+    });
+    document.getElementById('tool-search').addEventListener('input', function () {
+      var q = this.value.toLowerCase();
+      document.querySelectorAll('#tools-list .tool-card').forEach(function (card) {
+        var name = card.querySelector('.tool-name').textContent.toLowerCase();
+        var desc = card.querySelector('.tool-desc').textContent.toLowerCase();
+        card.style.display = (name.includes(q) || desc.includes(q)) ? '' : 'none';
+      });
     });
 
     // ── Utils ──────────────────────────────────────────────────────────────────
