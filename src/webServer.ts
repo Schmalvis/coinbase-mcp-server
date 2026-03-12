@@ -309,9 +309,14 @@ function buildHtml(): string {
     /* ── Two-column layout ── */
     main {
       display: grid;
-      grid-template-columns: 320px 1fr;
+      grid-template-columns: minmax(240px, 320px) 1fr;
       flex: 1;
       overflow: hidden;
+    }
+
+    @media (max-width: 640px) {
+      main { grid-template-columns: 1fr; }
+      .panel + .panel { border-left: none; border-top: 1px solid var(--border); }
     }
 
     /* ── Shared panel ── */
