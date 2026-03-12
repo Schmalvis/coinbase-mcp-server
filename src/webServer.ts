@@ -573,6 +573,7 @@ function buildHtml(): string {
     loadTools();
     pollLogs();
     setInterval(pollLogs, ${POLL_MS});
+    setInterval(loadTools, 30000); // refresh tool list every 30 s
   </script>
 </body>
 </html>`;
