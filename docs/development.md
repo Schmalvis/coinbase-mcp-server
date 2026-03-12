@@ -11,6 +11,7 @@
 ## Running Locally
 
 ```bash
+cp .env.example .env   # fill in CDP credentials
 npm install
 
 # Development — runs via tsx with no compile step
@@ -21,25 +22,25 @@ npm run build
 npm start
 ```
 
-On successful startup:
+On successful startup you'll see something like:
 
 ```
-[log]  Trimmed activity log: kept N entries
-[boot] Resuming existing wallet from /app/data/wallet_data.json
-[boot] Loaded 12 AgentKit tool(s).
+[boot] Configuring CdpEvmWalletProvider on base-sepolia
+[boot] Wallet address (base-sepolia): 0xABC...
+[boot] Loaded 38 tool(s) for base-sepolia.
+[mcp]  Stdio transport ready.
 [web]  UI available at http://localhost:3002
-[mcp]  Server running on stdio – ready for connections.
 ```
 
 ## Mock UI Test
 
-Runs the web server with 12 mock tools and seeded activity log entries — no Coinbase credentials required. Useful for iterating on the UI and verifying the API endpoints.
+Runs the web server with mock tools and seeded log entries — no CDP credentials required. Useful for iterating on the UI.
 
 ```bash
 npm run test:ui
 ```
 
-Then open [http://localhost:3002](http://localhost:3002). All 19 API assertions run automatically and results are printed to the terminal. Press `Ctrl+C` to stop (temp log file is cleaned up automatically).
+Then open [http://localhost:3002](http://localhost:3002).
 
 ## Project Structure
 
@@ -48,14 +49,13 @@ coinbase-mcp-server/
 ├── src/
 │   ├── index.ts          ← Entry point — wallet, AgentKit, MCP + web server wiring
 │   ├── logger.ts         ← Activity log (JSONL, configurable retention)
-│   └── webServer.ts      ← HTTP monitoring UI (port 3002)
+│   └── webServer.ts      ← HTTP monitoring UI + /mcp HTTP transport (port 3002)
 ├── scripts/
-│   └── test-ui.ts        ← Mock test runner
+│   └── test-ui.ts        ← Mock UI test runner
 ├── docs/                 ← This documentation
 ├── .github/workflows/
-│   └── docker-publish.yml ← CI: builds linux/arm64 image on push to main
-├── stack.env             ← Env config for Docker/Portainer deployment
-├── .env.example          ← Template for local credentials
+│   └── docker-publish.yml ← CI: builds and pushes image on push to main
+├── .env.example          ← Template for local credentials (copy to .env)
 ├── docker-compose.yml
 ├── Dockerfile
 ├── package.json
@@ -64,7 +64,7 @@ coinbase-mcp-server/
 
 ## TypeScript
 
-The project uses `"module": "NodeNext"` — all local imports require the `.js` extension even though the source files are `.ts`. This is handled automatically; just follow the pattern in existing files.
+The project uses `"module": "NodeNext"` — all local imports require the `.js` extension even though the source files are `.ts`. Follow the pattern in existing files.
 
 ```bash
 npm run build   # tsc — outputs to dist/

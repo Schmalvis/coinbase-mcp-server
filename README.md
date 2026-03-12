@@ -1,6 +1,6 @@
 # Coinbase AgentKit MCP Server
 
-A [Model Context Protocol](https://modelcontextprotocol.io) server that gives AI assistants direct access to your Coinbase wallet — check balances, transfer funds, deploy tokens, trade assets, and interact with the Base blockchain, all through natural language.
+A [Model Context Protocol](https://modelcontextprotocol.io) server that gives AI assistants direct access to your Coinbase wallet — check balances, transfer funds, trade assets, interact with DeFi protocols, and query on-chain data, all through natural language.
 
 ```
 You → Claude / VS Code → This MCP Server → Coinbase AgentKit → Base Blockchain
@@ -10,26 +10,46 @@ You → Claude / VS Code → This MCP Server → Coinbase AgentKit → Base Bloc
 
 ## Available Tools
 
-| Tool | Description |
-|------|-------------|
-| `get_wallet_details` | Wallet address and network info |
-| `get_balance` | Balance of any asset (ETH, USDC, …) |
-| `request_faucet_funds` | Free test tokens from the faucet (testnet only) |
-| `transfer` | Send an asset to any address |
-| `trade` | Swap one asset for another via DEX |
-| `deploy_token` | Deploy an ERC-20 token contract |
-| `deploy_nft` | Deploy an ERC-721 NFT collection |
-| `mint_nft` | Mint an NFT to an address |
-| `wrap_eth` | Wrap ETH → WETH |
-| `get_asset_price` | Current USD price of any on-chain asset |
-| `register_basename` | Register a Base ENS name (`.base.eth`) |
-| `wow_create_token` | Launch a WOW bonding-curve memecoin |
+| Category | Tools |
+|----------|-------|
+| Wallet | `get_wallet_details`, `native_transfer` |
+| Tokens (ERC-20) | `get_balance`, `transfer`, `approve`, `get_allowance` |
+| NFTs (ERC-721) | `mint`, `transfer`, `get_balance` |
+| WETH | `wrap_eth`, `unwrap_eth` |
+| Swaps & routing | `get_swap_price`, `swap`, `route` (mainnet) |
+| Basenames | `register_basename` |
+| Compound | `supply`, `withdraw`, `borrow`, `repay`, `get_portfolio` |
+| Morpho | `deposit`, `withdraw` |
+| Superfluid | streams, pools, super tokens, wrapping |
+| DeFiLlama | `find_protocol`, `get_protocol`, `get_token_prices` |
+| Pyth | `fetch_price_feed`, `fetch_price` |
+| CDP | `request_faucet_funds` (testnet), `get_swap_price`, `swap` |
+
+See [CLAUDE.md](CLAUDE.md) for the full tool list per provider.
 
 ---
 
-## Connecting to Claude Desktop
+## Connecting via HTTP (LAN / remote)
 
-Add the server to `claude_desktop_config.json`:
+The server exposes a Streamable HTTP MCP endpoint at `/mcp`. Add to `mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "coinbase": {
+      "url": "http://<server-ip>:3002/mcp"
+    }
+  }
+}
+```
+
+Replace `<server-ip>` with your Docker host's IP (e.g. `192.168.1.100`).
+
+---
+
+## Connecting via stdio (Claude Desktop / local Docker)
+
+Add to `claude_desktop_config.json`:
 
 ```json
 {
@@ -38,15 +58,18 @@ Add the server to `claude_desktop_config.json`:
       "command": "docker",
       "args": [
         "run", "-i", "--rm",
-        "-e", "CDP_API_KEY_NAME",
-        "-e", "CDP_API_KEY_PRIVATE_KEY",
+        "-e", "CDP_API_KEY_ID",
+        "-e", "CDP_API_KEY_SECRET",
+        "-e", "CDP_WALLET_SECRET",
         "-e", "NETWORK_ID",
+        "-p", "3002:3002",
         "-v", "coinbase_wallet_data:/app/data",
         "ghcr.io/schmalvis/coinbase-mcp-server:latest"
       ],
       "env": {
-        "CDP_API_KEY_NAME": "your-key-id",
-        "CDP_API_KEY_PRIVATE_KEY": "your-base64-private-key",
+        "CDP_API_KEY_ID": "your-key-id",
+        "CDP_API_KEY_SECRET": "your-api-secret",
+        "CDP_WALLET_SECRET": "your-wallet-secret",
         "NETWORK_ID": "base-sepolia"
       }
     }
@@ -58,39 +81,32 @@ Restart Claude Desktop. Ask: *"What Coinbase tools do you have available?"* to c
 
 ---
 
-## Connecting to VS Code
+## Quick Start (Docker Compose)
 
-Add to `.vscode/mcp.json` in your workspace (or user `settings.json` under `"mcp.servers"`):
-
-```json
-{
-  "servers": {
-    "coinbase": {
-      "type": "stdio",
-      "command": "docker",
-      "args": [
-        "run", "-i", "--rm",
-        "-e", "CDP_API_KEY_NAME",
-        "-e", "CDP_API_KEY_PRIVATE_KEY",
-        "-e", "NETWORK_ID",
-        "-v", "coinbase_wallet_data:/app/data",
-        "ghcr.io/schmalvis/coinbase-mcp-server:latest"
-      ],
-      "env": {
-        "CDP_API_KEY_NAME": "your-key-id",
-        "CDP_API_KEY_PRIVATE_KEY": "your-base64-private-key",
-        "NETWORK_ID": "base-sepolia"
-      }
-    }
-  }
-}
+```bash
+cp .env.example .env   # fill in your CDP credentials
+docker compose up -d
 ```
+
+Web UI available at **`http://localhost:3002`**.
+
+---
+
+## Multi-Network
+
+Set `NETWORK_ID` to a comma-separated list to enable multiple networks:
+
+```env
+NETWORK_ID=base-sepolia,base-mainnet
+```
+
+Each tool gains a `network` parameter — the AI specifies which network per request.
 
 ---
 
 ## Web UI
 
-When running, a monitoring dashboard is available at **`http://localhost:3002`** (or your server's IP when deployed remotely). It shows all available tools and a live rolling activity log.
+When running, a monitoring dashboard is available at **`http://localhost:3002`** (or your server's IP for remote deployments). Shows all available tools and a live rolling activity log.
 
 ---
 
@@ -98,11 +114,11 @@ When running, a monitoring dashboard is available at **`http://localhost:3002`**
 
 | Topic | Doc |
 |-------|-----|
-| Getting Coinbase API keys and configuring env vars | [docs/configuration.md](docs/configuration.md) |
-| Running locally and development workflow | [docs/development.md](docs/development.md) |
+| CDP credentials and env vars | [docs/configuration.md](docs/configuration.md) |
+| Running locally and development | [docs/development.md](docs/development.md) |
 | Docker, Portainer, and GitOps deployment | [docs/deployment.md](docs/deployment.md) |
 | Web UI and activity log | [docs/web-ui.md](docs/web-ui.md) |
-| Wallet management, backup, testnet vs mainnet | [docs/wallet.md](docs/wallet.md) |
+| Wallet management and testnet vs mainnet | [docs/wallet.md](docs/wallet.md) |
 
 ---
 
