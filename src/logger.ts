@@ -31,6 +31,11 @@ const LOG_RETENTION_MS: number = (() => {
   return safe * 24 * 60 * 60 * 1000;
 })();
 
+// ── In-memory ring buffer ─────────────────────────────────────────────────────
+
+const LOG_BUFFER_MAX = 500;
+const logBuffer: LogEntry[] = [];
+
 // ── Core I/O ──────────────────────────────────────────────────────────────────
 
 export function writeLog(entry: LogEntry): void {
@@ -39,24 +44,37 @@ export function writeLog(entry: LogEntry): void {
   // Synchronous: Node.js is single-threaded and tool calls are sequential,
   // so there is no risk of interleaved appends corrupting the JSONL file.
   fs.appendFileSync(ACTIVITY_LOG_FILE, JSON.stringify(entry) + "\n", "utf-8");
+  logBuffer.push(entry);
+  if (logBuffer.length > LOG_BUFFER_MAX) {
+    logBuffer.splice(0, logBuffer.length - LOG_BUFFER_MAX);
+  }
 }
 
 export function readLogs(limit = 200): LogEntry[] {
+  const cap = Math.min(limit, LOG_BUFFER_MAX);
+
+  // Normal runtime path: serve directly from buffer
+  if (logBuffer.length > 0) {
+    return [...logBuffer].reverse().slice(0, cap);
+  }
+
+  // Cold-start fallback: read file, warm buffer, then serve
   if (!fs.existsSync(ACTIVITY_LOG_FILE)) return [];
 
   const raw = fs.readFileSync(ACTIVITY_LOG_FILE, "utf-8");
-  const entries: LogEntry[] = [];
-
   for (const line of raw.split("\n")) {
     if (!line.trim()) continue;
     try {
-      entries.push(JSON.parse(line) as LogEntry);
+      logBuffer.push(JSON.parse(line) as LogEntry);
     } catch {
       // skip corrupt lines
     }
   }
+  if (logBuffer.length > LOG_BUFFER_MAX) {
+    logBuffer.splice(0, logBuffer.length - LOG_BUFFER_MAX);
+  }
 
-  return entries.reverse().slice(0, limit);
+  return [...logBuffer].reverse().slice(0, cap);
 }
 
 export function trimOldLogs(): void {
