@@ -58,14 +58,18 @@ export function readLogs(limit = 200): LogEntry[] {
     return [...logBuffer].reverse().slice(0, cap);
   }
 
-  // Cold-start fallback: read file, warm buffer, then serve
+  // Cold-start fallback: read file, warm buffer (applying retention filter), then serve
   if (!fs.existsSync(ACTIVITY_LOG_FILE)) return [];
 
+  const cutoff = Date.now() - LOG_RETENTION_MS;
   const raw = fs.readFileSync(ACTIVITY_LOG_FILE, "utf-8");
   for (const line of raw.split("\n")) {
     if (!line.trim()) continue;
     try {
-      logBuffer.push(JSON.parse(line) as LogEntry);
+      const entry = JSON.parse(line) as LogEntry;
+      if (new Date(entry.ts).getTime() >= cutoff) {
+        logBuffer.push(entry);
+      }
     } catch {
       // skip corrupt lines
     }
