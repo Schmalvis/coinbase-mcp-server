@@ -456,6 +456,27 @@ function buildHtml(): string {
     .log-ev  { font-weight: 600; white-space: nowrap; }
     .log-msg { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
 
+    .log-entry { }
+    .log-detail {
+      display: none;
+      font-family: var(--mono);
+      font-size: 11px;
+      white-space: pre-wrap;
+      word-break: break-all;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 0 0 6px 6px;
+      padding: 6px 10px;
+      margin: 0 6px 6px;
+      color: var(--muted);
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .log-entry.expanded .log-detail { display: block; }
+    .log-entry.expanded .log-row { background: var(--surface); border-radius: 6px 6px 0 0; }
+    .log-entry.expanded .log-msg { white-space: normal; overflow: visible; text-overflow: clip; }
+    .log-row.clickable { cursor: pointer; }
+
     /* Event badges */
     .ev-pill {
       display: inline-block;
@@ -612,10 +633,17 @@ function buildHtml(): string {
             hour:'2-digit', minute:'2-digit', second:'2-digit',
           });
           const cls = EV_CLASS[e.event] || '';
-          return \`<div class="log-row">
-            <span class="log-ts">\${esc(ts)}</span>
-            <span class="log-ev"><span class="ev-pill \${cls}">\${esc(e.event)}</span></span>
-            <span class="log-msg" title="\${esc(e.message)}">\${esc(e.message)}</span>
+          const hasDetail = e.data && Object.keys(e.data).length > 0;
+          const detailHtml = hasDetail
+            ? '<pre class="log-detail">' + esc(JSON.stringify(e.data, null, 2)) + '</pre>'
+            : '';
+          return \`<div class="log-entry">
+            <div class="log-row \${hasDetail ? 'clickable' : ''}">
+              <span class="log-ts">\${esc(ts)}</span>
+              <span class="log-ev"><span class="ev-pill \${cls}">\${esc(e.event)}</span></span>
+              <span class="log-msg">\${esc(e.message)}</span>
+            </div>
+            \${detailHtml}
           </div>\`;
         }).join('');
       } catch (e) { console.error('log fetch failed', e); }
@@ -639,6 +667,10 @@ function buildHtml(): string {
         var desc = card.querySelector('.tool-desc').textContent.toLowerCase();
         card.style.display = (name.includes(q) || desc.includes(q)) ? '' : 'none';
       });
+    });
+    document.getElementById('log-list').addEventListener('click', function (e) {
+      var row = e.target.closest('.log-row.clickable');
+      if (row) row.closest('.log-entry').classList.toggle('expanded');
     });
 
     // ── Utils ──────────────────────────────────────────────────────────────────
