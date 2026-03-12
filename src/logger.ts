@@ -78,29 +78,37 @@ export function readLogs(limit = 200): LogEntry[] {
 }
 
 export function trimOldLogs(): void {
-  if (!fs.existsSync(ACTIVITY_LOG_FILE)) return;
+  setImmediate(() => { void _trimOldLogsAsync(); });
+}
 
-  const cutoff = Date.now() - LOG_RETENTION_MS;
-  const raw = fs.readFileSync(ACTIVITY_LOG_FILE, "utf-8");
-  const lines = raw.split("\n").filter((l) => l.trim().length > 0);
+async function _trimOldLogsAsync(): Promise<void> {
+  try {
+    if (!fs.existsSync(ACTIVITY_LOG_FILE)) return;
 
-  const kept = lines.filter((line) => {
-    try {
-      const entry = JSON.parse(line) as LogEntry;
-      return new Date(entry.ts).getTime() >= cutoff;
-    } catch {
-      return false;
-    }
-  });
+    const cutoff = Date.now() - LOG_RETENTION_MS;
+    const raw = await fs.promises.readFile(ACTIVITY_LOG_FILE, "utf-8");
+    const lines = raw.split("\n").filter((l) => l.trim().length > 0);
 
-  fs.writeFileSync(
-    ACTIVITY_LOG_FILE,
-    kept.join("\n") + (kept.length ? "\n" : ""),
-    "utf-8"
-  );
-  console.error(
-    `[log] Trimmed activity log: kept ${kept.length} / ${lines.length} entries (>${Math.round(LOG_RETENTION_MS / 86400000)}d old removed).`
-  );
+    const kept = lines.filter((line) => {
+      try {
+        const entry = JSON.parse(line) as LogEntry;
+        return new Date(entry.ts).getTime() >= cutoff;
+      } catch {
+        return false;
+      }
+    });
+
+    await fs.promises.writeFile(
+      ACTIVITY_LOG_FILE,
+      kept.join("\n") + (kept.length ? "\n" : ""),
+      "utf-8"
+    );
+    console.error(
+      `[log] Trimmed activity log: kept ${kept.length} / ${lines.length} entries (>${Math.round(LOG_RETENTION_MS / 86400000)}d old removed).`
+    );
+  } catch (err) {
+    console.error("[log] trimOldLogs failed:", err);
+  }
 }
 
 // ── Convenience helpers ───────────────────────────────────────────────────────
