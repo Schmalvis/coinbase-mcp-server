@@ -42,6 +42,11 @@ import { startWebServer } from "./webServer.js";
 
 type RawToolHandler = (name: string, args: Record<string, unknown>) => Promise<unknown>;
 
+interface NetworkedTool {
+  schema: Tool;
+  handlers: Map<string, RawToolHandler>;
+}
+
 // ── Action provider factory ───────────────────────────────────────────────────
 
 function buildActionProviders() {
@@ -117,10 +122,6 @@ async function main(): Promise<void> {
 
   // 2. Initialise each network ───────────────────────────────────────────────
   // toolRegistry: toolName → { schema, handlers: Map<networkId, handler> }
-  interface NetworkedTool {
-    schema: Tool;
-    handlers: Map<string, RawToolHandler>;
-  }
   const toolRegistry = new Map<string, NetworkedTool>();
 
   for (const networkId of networks) {
