@@ -219,13 +219,13 @@
             {
               "id": "3139b5fa-4390-4ee3-92bd-c8630d34ac2f",
               "name": "KEYID",
-              "value": "c7150193-47e4-455e-981f-408b8029676a",
+              "value": "YOUR_CDP_API_KEY_ID",
               "type": "string"
             },
             {
               "id": "33101dfe-225d-4496-8e91-a85704198e48",
               "name": "KEYSEC",
-              "value": "p92a2H1ceivj3Z7RSbSV+1ZBnZ37I+ZpVLtGeokDwok8cYkcK7B4GM4MUnVvHCQHMST/AepM/1TWNCbYdXhNZg==",
+              "value": "YOUR_CDP_API_KEY_SECRET",
               "type": "string"
             }
           ]
