@@ -120,6 +120,14 @@ export function startWebServer(tools: Tool[], toolHandler: ToolHandler, status: 
         res.end(buildHtml());
         break;
 
+      case "/health":
+        res.writeHead(200, {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+        });
+        res.end(JSON.stringify({ status: "ok", uptimeMs: Date.now() - status.startedAt.getTime() }));
+        break;
+
       case "/api/tools":
         res.writeHead(200, {
           "Content-Type": "application/json",
