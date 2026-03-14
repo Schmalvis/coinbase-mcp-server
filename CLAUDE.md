@@ -126,6 +126,7 @@ volumes:
 | `WEB_PORT` | No | `3002` | Port for the web UI |
 | `LOG_RETENTION_DAYS` | No | `30` | Days to retain activity log entries |
 | `WALLET_DATA_PATH` | No | (named volume) | Host path for bind-mount data storage (wallet files + activity log) |
+| `ALLOW_EMERGENCY_TRANSFER` | No | `false` | Set to `true` to expose `emergency_transfer_all` MCP tool |
 
 ---
 
@@ -169,74 +170,6 @@ curl -sk -X PUT 'https://192.168.68.139:9443/api/stacks/67/git/redeploy?endpoint
   -H 'Content-Type: application/json' \
   -d '{"prune":false,"pullImage":true,"repositoryAuthentication":false}'
 ```
-
----
-
-## Planned Improvements
-
-The following features are prioritised for future implementation. Each includes enough
-technical context for an AI assistant to implement without needing further research.
-
-### 1. Wallet address visible in web UI
-
-**Problem:** The web UI (port 3002) shows tools and logs but not the active wallet address(es).
-When something goes wrong it requires querying `WalletActionProvider_get_wallet_details` to
-find which wallet is in use.
-
-**Solution:** Extend `startWebServer()` in `src/webServer.ts` — it already receives `address`
-and `networks` as arguments. Add a `/api/status` endpoint returning:
-```json
-{ "networks": ["base-sepolia", "base-mainnet"], "addresses": { "base-sepolia": "0x...", "base-mainnet": "0x..." }, "startedAt": "ISO8601" }
-```
-Update the UI to show this prominently at the top of the page.
-
-Note: `initNetwork()` currently only returns `address` for the primary network. Refactor
-`main()` to collect a `Map<networkId, address>` and pass it to `startWebServer()`.
-
----
-
-### 2. Emergency native transfer tool
-
-**Problem:** If a wallet address changes unexpectedly (e.g. data volume lost), funds become
-inaccessible until the wallet is restored. There is no quick recovery path via MCP.
-
-**Solution:** Add a `WalletActionProvider_transfer_all_to` tool (or equivalent) that:
-- Takes a destination address as input
-- Estimates gas and transfers the full native balance minus gas
-- Requires `ALLOW_EMERGENCY_TRANSFER=true` env var to be enabled (off by default)
-- Is only exposed as an MCP tool when that env var is set
-- Should work on both networks in multi-network mode
-
-This is a safety escape hatch, not a trading tool. Guard it accordingly.
-
----
-
-### 3. Wallet data export endpoint
-
-**Problem:** `exportWallet()` on `CdpEvmWalletProvider` returns only `{ name, address }` —
-the server-side key material is held by CDP and is not exportable. However, the `address` is
-enough to restore the wallet (via `configureWithWallet({ address })`) as long as the CDP
-credentials are the same.
-
-**Solution:** Expose `GET /api/wallet` in `webServer.ts` returning the same data as
-`/api/status` (addresses per network, credentials fingerprint, data path). This helps
-diagnose which wallet is active and whether the address files are correctly populated,
-without exposing private key material.
-
----
-
-### 4. Activity log: include wallet address in boot entries
-
-**Problem:** Boot log entries record `address` and `network` separately per entry. When
-reviewing logs after an incident, it requires correlating multiple entries to understand
-the full boot state.
-
-**Solution:** Add a single consolidated `server_ready` log entry that includes all
-networks and their addresses together:
-```json
-{ "event": "server_ready", "addresses": { "base-mainnet": "0x...", "base-sepolia": "0x..." }, "toolCount": 39, "networks": ["base-sepolia", "base-mainnet"] }
-```
-The individual per-network entries can remain for granularity.
 
 ---
 
