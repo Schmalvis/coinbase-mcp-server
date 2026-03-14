@@ -9,16 +9,11 @@ services:
     ports:
       - "${WEB_PORT:-3002}:${WEB_PORT:-3002}"
 
-    environment:
-      CDP_API_KEY_ID: ${CDP_API_KEY_ID}
-      CDP_API_KEY_SECRET: ${CDP_API_KEY_SECRET}
-      CDP_WALLET_SECRET: ${CDP_WALLET_SECRET}
-      NETWORK_ID: ${NETWORK_ID:-base-sepolia}
-      WEB_PORT: ${WEB_PORT:-3002}
-      LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-30}
+    env_file:
+      - /home/pi/docker/coinbase-mcp/.env
 
     volumes:
-      # WALLET_DATA_PATH (stack.env) controls where wallet data is stored:
+      # WALLET_DATA_PATH (from .env) controls where wallet data is stored:
       #   unset / default → Docker-managed named volume  (automatic, no host setup needed)
       #   absolute path   → bind mount to that host path (transparent, easy to back up)
       #                     The directory must exist and be writable by UID 1000 (node user).
