@@ -28,6 +28,8 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import "dotenv/config";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   logBoot,
   logFatal,
@@ -45,6 +47,37 @@ type RawToolHandler = (name: string, args: Record<string, unknown>) => Promise<u
 interface NetworkedTool {
   schema: Tool;
   handlers: Map<string, RawToolHandler>;
+}
+
+// ── Wallet persistence ────────────────────────────────────────────────────────
+
+const DATA_DIR = "/app/data";
+
+function walletAddressFile(networkId: string): string {
+  return join(DATA_DIR, `${networkId}-address.txt`);
+}
+
+function loadSavedAddress(networkId: string): string | undefined {
+  const file = walletAddressFile(networkId);
+  if (!existsSync(file)) return undefined;
+  try {
+    const addr = readFileSync(file, "utf8").trim();
+    if (addr) return addr;
+  } catch (e) {
+    console.error(`[boot] Failed to read wallet address file for ${networkId}:`, e);
+  }
+  return undefined;
+}
+
+function saveAddress(networkId: string, address: string): void {
+  try {
+    mkdirSync(DATA_DIR, { recursive: true });
+    writeFileSync(walletAddressFile(networkId), address);
+    console.error(`[boot] Persisted wallet address ${address} for ${networkId}`);
+    logBoot(`Persisted wallet address for ${networkId}`, { address, network: networkId });
+  } catch (e) {
+    console.error(`[boot] Failed to persist wallet address for ${networkId}:`, e);
+  }
 }
 
 // ── Action provider factory ───────────────────────────────────────────────────
@@ -79,14 +112,32 @@ async function initNetwork(
   apiKeySecret: string,
   walletSecret: string,
 ): Promise<{ tools: Tool[]; toolHandler: RawToolHandler; address: string }> {
+  const savedAddress = loadSavedAddress(networkId);
+
+  if (savedAddress) {
+    const msg = `Restoring wallet ${savedAddress} on ${networkId}`;
+    console.error("[boot]", msg);
+    logBoot(msg);
+  } else {
+    const msg = `No saved wallet for ${networkId} — a new wallet will be created`;
+    console.error("[boot]", msg);
+    logBoot(msg);
+  }
+
   const walletProvider = await CdpEvmWalletProvider.configureWithWallet({
     apiKeyId,
     apiKeySecret,
     walletSecret,
     networkId,
+    ...(savedAddress ? { address: savedAddress as `0x${string}` } : {}),
   });
 
-  const address = await walletProvider.getAddress();
+  const address = walletProvider.getAddress();
+
+  // Persist address on first creation (or if address changed vs saved)
+  if (!savedAddress || address.toLowerCase() !== savedAddress.toLowerCase()) {
+    saveAddress(networkId, address);
+  }
 
   const agentKit = await AgentKit.from({
     walletProvider,
