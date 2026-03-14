@@ -47,10 +47,28 @@ src/
 
 ## Key Behaviours
 
-### Wallet Lifecycle
-- Uses the CDP v2 API (`CdpEvmWalletProvider`) — wallet is deterministically derived from `CDP_WALLET_SECRET`
-- No local wallet file needed — the same secret always produces the same address
-- On each boot, the wallet address is logged to stderr and the activity log
+### Wallet Lifecycle (updated 2026-03-14)
+
+Wallet addresses are persisted to disk and restored on boot to prevent address drift across
+container restarts and image updates.
+
+**How it works:**
+- On first boot for a network, `CdpEvmWalletProvider.configureWithWallet()` creates a new EVM
+  server wallet. The resulting address is written to `/app/data/<networkId>-address.txt`.
+- On subsequent boots, the address file is read and passed as `address:` to `configureWithWallet()`.
+  CDP returns the same server wallet, so the address is stable.
+- If the address file is deleted or the data volume is lost, a new wallet is created and persisted.
+
+**Deployment note:** The host bind-mount path (`WALLET_DATA_PATH`) must survive image updates.
+Using a Docker named volume (default) is fine; a bind-mount to a fixed host path is better
+because it can be backed up and inspected directly.
+
+**Pre-seeding:** To force a specific wallet address on next boot (e.g. after recovery), write
+the address to `/app/data/<networkId>-address.txt` before starting the container:
+```bash
+echo '0xYourAddress' > /path/to/data/base-mainnet-address.txt
+```
+The address must belong to a server wallet created with the same CDP API credentials.
 
 ### Logging
 - Activity written as JSONL to `/app/data/activity.log`
@@ -60,7 +78,9 @@ src/
 ### Multi-Network Support
 Set `NETWORK_ID` to a comma-separated list to enable multiple networks (e.g. `base-sepolia,base-mainnet`).
 
-In multi-network mode each tool gains a `network` enum parameter — the calling LLM specifies which network to use per request. The default is the first network in the list. Single-network deployments have no `network` parameter.
+In multi-network mode each tool gains a `network` enum parameter — the calling LLM specifies which
+network to use per request. The default is the first network in the list. Single-network deployments
+have no `network` parameter.
 
 ### Transports
 Two MCP transports run simultaneously on the same process:
@@ -78,7 +98,10 @@ Both transports share the same tool handlers and activity log.
 
 ## Data Persistence
 
-`/app/data` is mounted as a Docker named volume (`wallet_data`) — used for the activity log only (wallet state lives in CDP, not locally):
+`/app/data` is mounted as a volume — used for:
+- `activity.log` — JSONL activity log
+- `<networkId>-address.txt` — persisted wallet address per network (e.g. `base-mainnet-address.txt`)
+- `.wallet_idempotency_key` — legacy file from old `CdpWalletProvider`, no longer used but harmless
 
 ```yaml
 volumes:
@@ -86,8 +109,8 @@ volumes:
 ```
 
 - `docker compose down` → **data is preserved**
-- `docker compose down -v` → **data is deleted (irreversible)**
-- Set `WALLET_DATA_PATH=/host/path` in your `.env` to use a bind mount instead (easier to back up)
+- `docker compose down -v` → **data is deleted (irreversible) — wallet address lost**
+- Set `WALLET_DATA_PATH=/host/path` in your `.env` to use a bind mount (recommended for production)
   - Directory must exist and be owned by UID 1000: `mkdir -p /path && chown 1000:1000 /path`
 
 ---
@@ -98,11 +121,11 @@ volumes:
 |---|---|---|---|
 | `CDP_API_KEY_ID` | Yes | — | CDP v2 API key ID (from portal.cdp.coinbase.com → API Keys) |
 | `CDP_API_KEY_SECRET` | Yes | — | CDP v2 API key secret |
-| `CDP_WALLET_SECRET` | Yes | — | CDP wallet secret — determines the wallet address |
+| `CDP_WALLET_SECRET` | Yes | — | CDP wallet secret — used to authenticate wallet operations |
 | `NETWORK_ID` | No | `base-sepolia` | Network ID, or comma-separated list e.g. `base-sepolia,base-mainnet` |
 | `WEB_PORT` | No | `3002` | Port for the web UI |
 | `LOG_RETENTION_DAYS` | No | `30` | Days to retain activity log entries |
-| `WALLET_DATA_PATH` | No | (named volume) | Host path for bind-mount log storage |
+| `WALLET_DATA_PATH` | No | (named volume) | Host path for bind-mount data storage (wallet files + activity log) |
 
 ---
 
@@ -122,6 +145,98 @@ docker compose up -d
 # Rebuild image locally
 docker build -t coinbase-mcp-server .
 ```
+
+---
+
+## Deployment Context (Schmalvis home lab)
+
+This server is deployed as a Portainer stack (`coinbase-mcp`, stack ID 67) on RPi5
+(`192.168.68.139`), tracking this repo's `main` branch via Portainer GitOps with
+`ForcePullImage: true`. Pushes to `main` trigger a GitHub Actions build; Portainer
+redeploys on the next GitOps poll or manual webhook trigger.
+
+**Active wallets (as of 2026-03-14):**
+- `base-mainnet`: `0x7dD5Acd498BCF96832f82684584734cF48c7318D`
+- `base-sepolia`: `0x9123528571C6aD8fe80eb0cC82f6a388311A3104`
+
+**Data path on host:** `/home/pi/shared/docker/coinbase/data/`
+(bind-mounted into container as `/app/data`; owned by pi/node, UID 1000)
+
+To force a redeploy via Portainer API (when MCP `deploy_stack` fails with 409):
+```bash
+curl -sk -X PUT 'https://192.168.68.139:9443/api/stacks/67/git/redeploy?endpointId=5' \
+  -H 'X-API-Key: <portainer-token>' \
+  -H 'Content-Type: application/json' \
+  -d '{"prune":false,"pullImage":true,"repositoryAuthentication":false}'
+```
+
+---
+
+## Planned Improvements
+
+The following features are prioritised for future implementation. Each includes enough
+technical context for an AI assistant to implement without needing further research.
+
+### 1. Wallet address visible in web UI
+
+**Problem:** The web UI (port 3002) shows tools and logs but not the active wallet address(es).
+When something goes wrong it requires querying `WalletActionProvider_get_wallet_details` to
+find which wallet is in use.
+
+**Solution:** Extend `startWebServer()` in `src/webServer.ts` — it already receives `address`
+and `networks` as arguments. Add a `/api/status` endpoint returning:
+```json
+{ "networks": ["base-sepolia", "base-mainnet"], "addresses": { "base-sepolia": "0x...", "base-mainnet": "0x..." }, "startedAt": "ISO8601" }
+```
+Update the UI to show this prominently at the top of the page.
+
+Note: `initNetwork()` currently only returns `address` for the primary network. Refactor
+`main()` to collect a `Map<networkId, address>` and pass it to `startWebServer()`.
+
+---
+
+### 2. Emergency native transfer tool
+
+**Problem:** If a wallet address changes unexpectedly (e.g. data volume lost), funds become
+inaccessible until the wallet is restored. There is no quick recovery path via MCP.
+
+**Solution:** Add a `WalletActionProvider_transfer_all_to` tool (or equivalent) that:
+- Takes a destination address as input
+- Estimates gas and transfers the full native balance minus gas
+- Requires `ALLOW_EMERGENCY_TRANSFER=true` env var to be enabled (off by default)
+- Is only exposed as an MCP tool when that env var is set
+- Should work on both networks in multi-network mode
+
+This is a safety escape hatch, not a trading tool. Guard it accordingly.
+
+---
+
+### 3. Wallet data export endpoint
+
+**Problem:** `exportWallet()` on `CdpEvmWalletProvider` returns only `{ name, address }` —
+the server-side key material is held by CDP and is not exportable. However, the `address` is
+enough to restore the wallet (via `configureWithWallet({ address })`) as long as the CDP
+credentials are the same.
+
+**Solution:** Expose `GET /api/wallet` in `webServer.ts` returning the same data as
+`/api/status` (addresses per network, credentials fingerprint, data path). This helps
+diagnose which wallet is active and whether the address files are correctly populated,
+without exposing private key material.
+
+---
+
+### 4. Activity log: include wallet address in boot entries
+
+**Problem:** Boot log entries record `address` and `network` separately per entry. When
+reviewing logs after an incident, it requires correlating multiple entries to understand
+the full boot state.
+
+**Solution:** Add a single consolidated `server_ready` log entry that includes all
+networks and their addresses together:
+```json
+{ "event": "server_ready", "addresses": { "base-mainnet": "0x...", "base-sepolia": "0x..." }, "toolCount": 39, "networks": ["base-sepolia", "base-mainnet"] }
+```
+The individual per-network entries can remain for granularity.
 
 ---
 
