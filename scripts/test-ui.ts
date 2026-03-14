@@ -198,6 +198,13 @@ try {
   assert("GET /api/wallet  ->  addressFiles keyed by network", typeof files["base-sepolia"] === "string");
   assert("GET /api/wallet  ->  addressFiles contain dataDir prefix", files["base-sepolia"].startsWith("/tmp/test-data"));
 
+  // Emergency transfer tool must be absent without ALLOW_EMERGENCY_TRANSFER=true
+  const toolNames = (tools as Array<{ name: string }>).map(t => t.name);
+  assert(
+    "emergency_transfer_all absent without ALLOW_EMERGENCY_TRANSFER",
+    !toolNames.includes("emergency_transfer_all"),
+  );
+
   // 404 handling
   const notFound = await fetch(`http://localhost:${port}/does-not-exist`);
   assert("GET /does-not-exist  →  404", notFound.status === 404);

@@ -104,6 +104,38 @@ function buildActionProviders() {
   ];
 }
 
+// ── Emergency transfer ────────────────────────────────────────────────────────
+
+async function emergencyTransfer(
+  walletProvider: CdpEvmWalletProvider,
+  destination: string,
+): Promise<{ txHash: string; amountSentWei: string; destination: string }> {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(destination)) {
+    throw new Error(`Invalid destination address: ${destination}`);
+  }
+
+  const balance: bigint = await walletProvider.getBalance();
+
+  const GAS_LIMIT = 21_000n;
+  const gasPrice: bigint = await walletProvider.getPublicClient().getGasPrice();
+  const gasCost = GAS_LIMIT * gasPrice;
+
+  if (balance <= gasCost) {
+    throw new Error(
+      `Insufficient balance (${balance} wei) to cover gas cost (${gasCost} wei)`
+    );
+  }
+
+  const sendAmount: bigint = balance - gasCost;
+  // nativeTransfer(to, value) — value is a decimal string of wei, e.g. "999978000000000000"
+  const txHash = await walletProvider.nativeTransfer(
+    destination as `0x${string}`,
+    sendAmount.toString(),
+  );
+
+  return { txHash, amountSentWei: sendAmount.toString(), destination };
+}
+
 // ── Per-network initialisation ────────────────────────────────────────────────
 
 async function initNetwork(
@@ -234,6 +266,53 @@ async function main(): Promise<void> {
         },
       });
     }
+  }
+
+  // ── Emergency transfer tool (opt-in via ALLOW_EMERGENCY_TRANSFER=true) ───────
+  if (process.env.ALLOW_EMERGENCY_TRANSFER === "true") {
+    const emergencySchema: Tool = {
+      name: "emergency_transfer_all",
+      description:
+        "EMERGENCY USE ONLY: Transfers the entire native balance (minus gas) to a destination address. " +
+        "Only available when ALLOW_EMERGENCY_TRANSFER=true is set on the server.",
+      inputSchema: {
+        type: "object",
+        required: ["destination"],
+        properties: {
+          destination: {
+            type: "string",
+            description: "Destination wallet address (0x...)",
+          },
+          ...(multiNetwork
+            ? {
+                network: {
+                  type: "string",
+                  enum: networks,
+                  default: networks[0],
+                  description: `Blockchain network to drain. Available: ${networks.join(", ")}`,
+                },
+              }
+            : {}),
+        },
+      },
+    };
+
+    const emergencyHandlers = new Map<string, RawToolHandler>();
+    for (const [netId, wp] of walletProviders) {
+      emergencyHandlers.set(netId, async (_name, args) => {
+        const destination = args.destination as string;
+        return emergencyTransfer(wp, destination);
+      });
+    }
+
+    toolRegistry.set("emergency_transfer_all", {
+      schema: emergencySchema,
+      handlers: emergencyHandlers,
+    });
+    allTools.push(emergencySchema);
+
+    logBoot("Emergency transfer tool registered (ALLOW_EMERGENCY_TRANSFER=true)");
+    console.error("[boot] ALLOW_EMERGENCY_TRANSFER=true — emergency_transfer_all tool is active");
   }
 
   console.error(`[boot] ${allTools.length} unique tool(s) across ${networks.length} network(s).`);
