@@ -290,6 +290,8 @@ function buildHtml(): string {
       padding: 2px 9px;
     }
 
+    .addr-chip + .addr-chip { margin-left: 6px; }
+
     .header-right {
       margin-left: auto;
       display: flex;
@@ -543,8 +545,7 @@ function buildHtml(): string {
     <span class="header-badge" id="tool-count">–</span>
     <span class="header-badge" id="network-badge" style="display:none">–</span>
     <span class="header-badge" id="address-badge"
-      style="display:none;font-family:var(--mono);cursor:pointer"
-      title="Click to copy wallet address">–</span>
+      style="display:none;font-family:var(--mono);cursor:pointer">–</span>
 
     <div class="header-right">
       <div class="status-pill" id="status-pill"><span class="dot"></span>Online</div>
@@ -601,7 +602,7 @@ function buildHtml(): string {
           netBadge.style.display = '';
           addrBadge.style.display = '';
           addrBadge.title = '';
-          addrBadge.textContent = '';
+          addrBadge.innerHTML = '';
           Object.entries(status.addresses).forEach(function(entry) {
             var net = entry[0]; var addr = entry[1];
             var short = addr.slice(0, 6) + '\u2026' + addr.slice(-4);
