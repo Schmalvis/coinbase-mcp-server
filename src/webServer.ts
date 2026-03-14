@@ -11,9 +11,10 @@ import { readLogs } from "./logger.js";
 type ToolHandler = (name: string, args: Record<string, unknown>) => Promise<unknown>;
 
 interface ServerStatus {
-  address: string;
+  addresses: Record<string, string>;
   networks: string[];
   startedAt: Date;
+  dataDir: string;
 }
 
 // ── MCP server factory (one per HTTP request in stateless mode) ───────────────
@@ -152,12 +153,30 @@ export function startWebServer(tools: Tool[], toolHandler: ToolHandler, status: 
           "Cache-Control": "no-store",
         });
         res.end(JSON.stringify({
-          address: status.address,
           networks: status.networks,
+          addresses: status.addresses,
           toolCount: tools.length,
           uptimeMs: Date.now() - status.startedAt.getTime(),
         }));
         break;
+
+      case "/api/wallet": {
+        const addressFiles: Record<string, string> = {};
+        for (const net of status.networks) {
+          addressFiles[net] = `${status.dataDir}/${net}-address.txt`;
+        }
+        res.writeHead(200, {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+        });
+        res.end(JSON.stringify({
+          networks: status.networks,
+          addresses: status.addresses,
+          dataDir: status.dataDir,
+          addressFiles,
+        }));
+        break;
+      }
 
       default:
         res.writeHead(404, { "Content-Type": "text/plain" });
@@ -580,15 +599,28 @@ function buildHtml(): string {
         if (status) {
           netBadge.textContent = status.networks.join(', ');
           netBadge.style.display = '';
-          var addr = status.address;
-          var short = addr.slice(0, 6) + '\u2026' + addr.slice(-4);
-          addrBadge.textContent = short;
-          addrBadge.title = addr + ' (click to copy)';
           addrBadge.style.display = '';
-          addrBadge.onclick = function() {
-            navigator.clipboard.writeText(addr).then(function() {
-              addrBadge.textContent = 'Copied!';
-              setTimeout(function() { addrBadge.textContent = short; }, 1500);
+          addrBadge.title = '';
+          addrBadge.textContent = '';
+          Object.entries(status.addresses).forEach(function(entry) {
+            var net = entry[0]; var addr = entry[1];
+            var short = addr.slice(0, 6) + '\u2026' + addr.slice(-4);
+            var chip = document.createElement('span');
+            chip.className = 'addr-chip';
+            chip.dataset.addr = addr;
+            chip.title = addr + ' (click to copy)';
+            chip.textContent = net + ': ' + short;
+            chip.style.cursor = 'pointer';
+            addrBadge.appendChild(chip);
+          });
+          addrBadge.onclick = function(e) {
+            var chip = e.target.closest('.addr-chip');
+            if (!chip) return;
+            var fullAddr = chip.dataset.addr;
+            navigator.clipboard.writeText(fullAddr).then(function() {
+              var prev = chip.textContent;
+              chip.textContent = 'Copied!';
+              setTimeout(function() { chip.textContent = prev; }, 1500);
             });
           };
           pill.className = 'status-pill';

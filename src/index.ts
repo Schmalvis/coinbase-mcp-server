@@ -111,7 +111,7 @@ async function initNetwork(
   apiKeyId: string,
   apiKeySecret: string,
   walletSecret: string,
-): Promise<{ tools: Tool[]; toolHandler: RawToolHandler; address: string }> {
+): Promise<{ tools: Tool[]; toolHandler: RawToolHandler; address: string; walletProvider: CdpEvmWalletProvider }> {
   const savedAddress = loadSavedAddress(networkId);
 
   if (savedAddress) {
@@ -145,7 +145,7 @@ async function initNetwork(
   });
 
   const { tools, toolHandler } = await getMcpTools(agentKit);
-  return { tools, toolHandler, address };
+  return { tools, toolHandler, address, walletProvider };
 }
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
@@ -172,16 +172,18 @@ async function main(): Promise<void> {
   // toolRegistry: toolName → { schema, handlers: Map<networkId, handler> }
   const toolRegistry = new Map<string, NetworkedTool>();
 
-  let primaryAddress = "";
+  const addressMap: Record<string, string> = {};
+  const walletProviders = new Map<string, CdpEvmWalletProvider>();
   for (const networkId of networks) {
     const bootMsg = `Configuring CdpEvmWalletProvider on ${networkId}`;
     console.error("[boot]", bootMsg);
     logBoot(bootMsg);
 
-    const { tools, toolHandler, address } = await initNetwork(
+    const { tools, toolHandler, address, walletProvider } = await initNetwork(
       networkId, apiKeyId, apiKeySecret, walletSecret,
     );
-    if (!primaryAddress) primaryAddress = address;
+    addressMap[networkId] = address;
+    walletProviders.set(networkId, walletProvider);
 
     logBoot(`Wallet address (${networkId}): ${address}`, { address, network: networkId });
     console.error(`[boot] Wallet address (${networkId}): ${address}`);
@@ -287,9 +289,10 @@ async function main(): Promise<void> {
 
   // 6. Start web UI + HTTP MCP transport ────────────────────────────────────
   startWebServer(allTools, loggingToolHandler, {
-    address: primaryAddress,
+    addresses: addressMap,
     networks,
     startedAt: new Date(),
+    dataDir: DATA_DIR,
   });
 
   writeLog({
@@ -297,7 +300,7 @@ async function main(): Promise<void> {
     level: "info",
     event: "server_ready",
     message: `MCP server ready. ${allTools.length} tool(s) across ${networks.join(", ")}.`,
-    data: { toolCount: allTools.length, networks },
+    data: { toolCount: allTools.length, networks, addresses: addressMap },
   });
 
   console.error("[mcp] Stdio transport ready.");

@@ -104,7 +104,15 @@ console.log(`\n✓ Seeded ${SEED_ENTRIES.length} log entries → ${TEST_LOG_FILE
 
 // ── Start the web server ──────────────────────────────────────────────────────
 
-startWebServer(MOCK_TOOLS as never);
+startWebServer(MOCK_TOOLS as never, async () => ({}), {
+  addresses: {
+    "base-sepolia": "0x510D2b204A4496D34fee7EFbF563dACE3C441b7f",
+    "base-mainnet": "0x7dD5Acd498BCF96832f82684584734cF48c7318D",
+  },
+  networks: ["base-sepolia", "base-mainnet"],
+  startedAt: new Date(),
+  dataDir: "/tmp/test-data",
+});
 
 const port = process.env.WEB_PORT;
 console.log(`✓ Web server starting on port ${port}…\n`);
@@ -163,6 +171,32 @@ try {
   const limitRes = await fetch(`http://localhost:${port}/api/logs?limit=3`);
   const limited = await limitRes.json() as unknown[];
   assert("GET /api/logs?limit=3  →  honours limit", limited.length <= 3);
+
+  // GET /api/status
+  const statusRes = await fetch(`http://localhost:${port}/api/status`);
+  assert("GET /api/status  ->  200", statusRes.status === 200);
+  assert("GET /api/status  ->  JSON", statusRes.headers.get("content-type")?.includes("application/json") ?? false);
+  const statusBody = await statusRes.json() as Record<string, unknown>;
+  assert("GET /api/status  ->  has networks array",  Array.isArray(statusBody.networks));
+  assert("GET /api/status  ->  has addresses object", typeof statusBody.addresses === "object" && statusBody.addresses !== null);
+  assert("GET /api/status  ->  has toolCount",        typeof statusBody.toolCount === "number");
+  assert("GET /api/status  ->  has uptimeMs",         typeof statusBody.uptimeMs === "number");
+  assert("GET /api/status  ->  no 'address' field",   !("address" in statusBody));
+  const addrs = statusBody.addresses as Record<string, string>;
+  assert("GET /api/status  ->  base-sepolia address present", typeof addrs["base-sepolia"] === "string");
+
+  // GET /api/wallet
+  const walletRes = await fetch(`http://localhost:${port}/api/wallet`);
+  assert("GET /api/wallet  ->  200", walletRes.status === 200);
+  assert("GET /api/wallet  ->  JSON", walletRes.headers.get("content-type")?.includes("application/json") ?? false);
+  const walletBody = await walletRes.json() as Record<string, unknown>;
+  assert("GET /api/wallet  ->  has networks",      Array.isArray(walletBody.networks));
+  assert("GET /api/wallet  ->  has addresses",     typeof walletBody.addresses === "object" && walletBody.addresses !== null);
+  assert("GET /api/wallet  ->  has dataDir",       typeof walletBody.dataDir === "string");
+  assert("GET /api/wallet  ->  has addressFiles",  typeof walletBody.addressFiles === "object" && walletBody.addressFiles !== null);
+  const files = walletBody.addressFiles as Record<string, string>;
+  assert("GET /api/wallet  ->  addressFiles keyed by network", typeof files["base-sepolia"] === "string");
+  assert("GET /api/wallet  ->  addressFiles contain dataDir prefix", files["base-sepolia"].startsWith("/tmp/test-data"));
 
   // 404 handling
   const notFound = await fetch(`http://localhost:${port}/does-not-exist`);
