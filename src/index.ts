@@ -385,6 +385,12 @@ async function main(): Promise<void> {
   console.error("[mcp] Stdio transport ready.");
 }
 
+// Prevent non-fatal async rejections (e.g. agentkit analytics calls) from
+// crashing the process. Log them as warnings instead.
+process.on("unhandledRejection", (reason: unknown) => {
+  console.error("[warn] Unhandled promise rejection (non-fatal):", reason);
+});
+
 main().catch(async (err: unknown) => {
   console.error("[fatal]", err);
   logFatal("Unhandled startup error", err);
